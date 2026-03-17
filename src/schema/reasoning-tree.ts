@@ -6,7 +6,16 @@ import {
   NodeStatusSchema,
   NonEmptyStringSchema,
 } from "@/schema/common";
-import { SynthesisReportSchema } from "@/schema/consensus";
+import { ModelRunSchema, SynthesisReportSchema } from "@/schema/consensus";
+
+export const ConversationSchema = z
+  .object({
+    id: EntityIdSchema,
+    title: NonEmptyStringSchema,
+    createdAt: IsoDatetimeSchema,
+    updatedAt: IsoDatetimeSchema,
+  })
+  .strict();
 
 export const ConversationNodeSchema = z
   .object({
@@ -56,5 +65,70 @@ export const ConversationBranchSchema = z
     }
   });
 
+export const LoadedConversationSchema = z
+  .object({
+    conversation: ConversationSchema,
+    branches: z.array(ConversationBranchSchema),
+    nodes: z.array(ConversationNodeSchema),
+    modelRuns: z.array(ModelRunSchema),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const branchIds = new Set(value.branches.map((branch) => branch.id));
+    const nodeIds = new Set(value.nodes.map((node) => node.id));
+
+    value.branches.forEach((branch, index) => {
+      if (branch.conversationId !== value.conversation.id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "branch conversationId must match the loaded conversation id",
+          path: ["branches", index, "conversationId"],
+        });
+      }
+
+      for (const [field, nodeId] of [
+        ["sourceNodeId", branch.sourceNodeId],
+        ["rootNodeId", branch.rootNodeId],
+        ["headNodeId", branch.headNodeId],
+      ] as const) {
+        if (nodeId !== null && !nodeIds.has(nodeId)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `${field} must reference a node included in the loaded conversation`,
+            path: ["branches", index, field],
+          });
+        }
+      }
+    });
+
+    value.nodes.forEach((node, index) => {
+      if (node.conversationId !== value.conversation.id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "node conversationId must match the loaded conversation id",
+          path: ["nodes", index, "conversationId"],
+        });
+      }
+
+      if (!branchIds.has(node.branchId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "node branchId must reference a branch included in the loaded conversation",
+          path: ["nodes", index, "branchId"],
+        });
+      }
+
+      if (node.parentNodeId !== null && !nodeIds.has(node.parentNodeId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "node parentNodeId must reference a node included in the loaded conversation",
+          path: ["nodes", index, "parentNodeId"],
+        });
+      }
+    });
+  });
+
+export type Conversation = z.infer<typeof ConversationSchema>;
 export type ConversationNode = z.infer<typeof ConversationNodeSchema>;
 export type ConversationBranch = z.infer<typeof ConversationBranchSchema>;
+export type LoadedConversation = z.infer<typeof LoadedConversationSchema>;

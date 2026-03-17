@@ -1,14 +1,18 @@
 import {
   CandidateModelOutputSchema,
   ConflictPointSchema,
+  ConversationSchema,
   ConversationBranchSchema,
   ConversationNodeSchema,
+  LoadedConversationSchema,
   ModelRunSchema,
   SynthesisReportSchema,
   TruthPanelSnapshotSchema,
   type CandidateModelOutput,
+  type Conversation,
   type ConversationBranch,
   type ConversationNode,
+  type LoadedConversation,
   type JudgeModelOutput,
   type ModelRun,
   type SynthesisReport,
@@ -208,6 +212,13 @@ const failedReport: SynthesisReport = {
   createdAt: generatedTimestamp,
 };
 
+const conversation: Conversation = {
+  id: "conversation-1",
+  title: "Phase 1 schema planning",
+  createdAt: baseTimestamp,
+  updatedAt: generatedTimestamp,
+};
+
 const rootNode: ConversationNode = {
   id: "node-root-1",
   conversationId: "conversation-1",
@@ -247,6 +258,13 @@ const forkBranch: ConversationBranch = {
   sourceNodeId: "node-root-1",
 };
 
+const loadedConversation: LoadedConversation = {
+  conversation,
+  branches: [mainBranch, forkBranch],
+  nodes: [rootNode, childNode],
+  modelRuns: [completedCandidateRun, completedJudgeRun],
+};
+
 const truthPanelSnapshot: TruthPanelSnapshot = {
   reportId: readyReport.id,
   generatedAt: generatedTimestamp,
@@ -278,6 +296,7 @@ const truthPanelSnapshot: TruthPanelSnapshot = {
 describe("schema barrel", () => {
   it("parses valid module 2 fixtures", () => {
     expect(CandidateModelOutputSchema.parse(candidateOutput)).toEqual(candidateOutput);
+    expect(ConversationSchema.parse(conversation)).toEqual(conversation);
     expect(ModelRunSchema.parse(completedCandidateRun)).toEqual(completedCandidateRun);
     expect(SynthesisReportSchema.parse(readyReport)).toEqual(readyReport);
     expect(SynthesisReportSchema.parse(partialReport)).toEqual(partialReport);
@@ -286,6 +305,7 @@ describe("schema barrel", () => {
     expect(ConversationNodeSchema.parse(childNode)).toEqual(childNode);
     expect(ConversationBranchSchema.parse(mainBranch)).toEqual(mainBranch);
     expect(ConversationBranchSchema.parse(forkBranch)).toEqual(forkBranch);
+    expect(LoadedConversationSchema.parse(loadedConversation)).toEqual(loadedConversation);
     expect(TruthPanelSnapshotSchema.parse(truthPanelSnapshot)).toEqual(truthPanelSnapshot);
   });
 
@@ -350,6 +370,21 @@ describe("schema barrel", () => {
     const result = ConversationBranchSchema.safeParse({
       ...mainBranch,
       rootNodeId: null,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects loaded conversations with mismatched branch references", () => {
+    const result = LoadedConversationSchema.safeParse({
+      ...loadedConversation,
+      nodes: [
+        {
+          ...rootNode,
+          branchId: "branch-missing",
+        },
+        childNode,
+      ],
     });
 
     expect(result.success).toBe(false);
