@@ -57,4 +57,4 @@ docs/                   Engineering docs for setup and MVP sequencing
 
 ## License
 
-This project is available under the MIT License. See `LICENSE`.
+This project is available under the GNU Affero General Public License v3.0 only. See `LICENSE`.
