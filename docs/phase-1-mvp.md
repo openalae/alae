@@ -10,7 +10,7 @@ This repository follows a strict one-module-at-a-time execution model. Each modu
 ## Module Order
 
 - [x] Module 1: project scaffold
-- [ ] Module 2: core schema contracts
+- [x] Module 2: core schema contracts
 - [ ] Module 3: global state skeleton
 - [ ] Module 4: native API key security
 - [ ] Module 5: PGLite reasoning tree bootstrap
@@ -25,7 +25,8 @@ This repository follows a strict one-module-at-a-time execution model. Each modu
 - Tailwind v4 and shadcn base primitives are installed
 - Vitest and React Testing Library are configured
 - Core feature directories for `consensus`, `reasoning-tree`, `settings`, `schema`, and `store` already exist
+- `src/schema` now exports strict Zod contracts for synthesis reports, model runs, reasoning-tree snapshots, and truth-panel telemetry
 
 ## Next Module
 
-Module 2 will define the Phase 1 Zod contracts for synthesis reports, conflicts, resolutions, model runs, conversation nodes, and truth panel snapshots.
+Module 3 will introduce the Zustand state skeleton for the current session, active node, API key status, truth-panel visibility, and the latest synthesis result.
