@@ -20,6 +20,6 @@ export const createAppStore = (preloadedState: AppStorePreloadedState = {}) => {
   }));
 };
 
-const appStore = createAppStore();
+export const appStore = createAppStore();
 
 export const useAppStore = <T>(selector: (state: AppStore) => T) => useStore(appStore, selector);

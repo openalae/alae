@@ -1,4 +1,10 @@
-import { ArrowUpRight, LayoutPanelTop, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  ArrowUpRight,
+  KeyRound,
+  LayoutPanelTop,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,20 +15,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ProviderAccessCard } from "@/features/settings";
 
 const installedStack = [
   "Tauri 2 + Rust shell",
   "React 19 + Vite + TypeScript",
   "Tailwind v4 + shadcn base",
+  "Zod schema contracts + Zustand slices",
+  "Native secure-store bridge",
   "Vitest + React Testing Library",
 ];
 
 const queuedModules = [
-  "Schema contracts",
-  "Zustand state slices",
-  "Secure API key bridge",
   "PGLite conversation tree",
   "Consensus orchestration",
+  "Progressive workspace",
+  "Truth panel telemetry",
 ];
 
 export function AppShell() {
@@ -36,12 +44,12 @@ export function AppShell() {
           </div>
           <div className="space-y-3">
             <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.04em] text-balance lg:text-6xl">
-              Alae scaffolded for a local-first reasoning workstation.
+              Alae now secures provider access in the desktop shell.
             </h1>
             <p className="max-w-2xl text-base leading-7 text-muted-foreground lg:text-lg">
-              Module 1 is ready: the desktop shell, UI foundation, test tooling, and
-              PRD-aligned directories are in place. The next round can start from schema
-              contracts instead of boilerplate.
+              Modules 1 through 4 are in place: scaffold, schema contracts, global state,
+              and native API key management. The next round can connect local storage
+              without revisiting security boundaries.
             </p>
           </div>
         </div>
@@ -51,33 +59,33 @@ export function AppShell() {
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               Current module
             </div>
-            <div className="mt-2 text-lg font-semibold">01. Project Scaffold</div>
+            <div className="mt-2 text-lg font-semibold">04. Secure API Key Bridge</div>
           </div>
           <div className="rounded-3xl border border-border/80 bg-card/75 px-5 py-4">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               Target surface
             </div>
-            <div className="mt-2 text-lg font-semibold">Center Workspace + Truth Panel</div>
+            <div className="mt-2 text-lg font-semibold">Desktop shell + secure providers</div>
           </div>
         </div>
       </header>
 
-      <main className="grid flex-1 gap-6 py-8 xl:grid-cols-[minmax(0,1.65fr)_360px]">
+      <main className="grid flex-1 gap-6 py-8 xl:grid-cols-[minmax(0,1.65fr)_380px]">
         <Card className="overflow-hidden">
           <CardHeader className="border-b border-border/70 bg-card/85">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-2">
                 <CardTitle className="flex items-center gap-3 text-2xl">
                   <LayoutPanelTop className="h-5 w-5 text-primary" />
-                  Progressive Workspace Base
+                  Workspace Foundation
                 </CardTitle>
                 <CardDescription>
-                  The default Tauri welcome page is replaced with a product shell that matches
-                  the MVP direction without jumping ahead into reasoning logic.
+                  The shell stays focused on MVP foundations while native credential storage
+                  is wired end to end.
                 </CardDescription>
               </div>
               <Button variant="outline" size="sm" disabled>
-                Module 1 complete
+                Module 4 complete
               </Button>
             </div>
           </CardHeader>
@@ -103,7 +111,7 @@ export function AppShell() {
                 {queuedModules.map((item, index) => (
                   <li key={item} className="flex items-start gap-3">
                     <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
-                      {index + 2}
+                      {index + 5}
                     </span>
                     <span>{item}</span>
                   </li>
@@ -113,47 +121,64 @@ export function AppShell() {
           </CardContent>
           <CardFooter className="border-t border-border/70 pt-6">
             <Button variant="default" disabled>
-              Schema contracts next
+              PGLite conversation tree next
             </Button>
             <Button variant="ghost" disabled>
-              Native keychain bridge after state setup
+              Native credentials wired and verified
               <ArrowUpRight className="h-4 w-4" />
             </Button>
           </CardFooter>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-              Truth Panel Stub
-            </CardTitle>
-            <CardDescription>
-              This column reserves the final Phase 1 inspector surface without wiring live
-              metrics before the synthesis engine exists.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Runtime
+        <div className="space-y-6">
+          <ProviderAccessCard />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-3">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Truth Panel Stub
+              </CardTitle>
+              <CardDescription>
+                This column still reserves the final Phase 1 inspector surface while model
+                telemetry and trace data remain out of scope for module 4.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Runtime
+                </div>
+                <div className="mt-3 text-sm font-medium">Awaiting multi-model orchestration</div>
               </div>
-              <div className="mt-3 text-sm font-medium">Awaiting multi-model orchestration</div>
-            </div>
-            <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Token telemetry
+              <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Token telemetry
+                </div>
+                <div className="mt-3 text-sm font-medium">Pending model run records</div>
               </div>
-              <div className="mt-3 text-sm font-medium">Pending model run records</div>
-            </div>
-            <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Validation traces
+              <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Validation traces
+                </div>
+                <div className="mt-3 text-sm font-medium">Pending Zod contracts</div>
               </div>
-              <div className="mt-3 text-sm font-medium">Pending Zod contracts</div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/15 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-3 text-lg">
+                <KeyRound className="h-5 w-5 text-primary" />
+                Security boundary
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
+              <p>Only provider configuration state lives in Zustand.</p>
+              <p>Raw API keys stay in the OS secure store and are fetched on demand only.</p>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );
