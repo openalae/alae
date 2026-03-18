@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { toggleTruthPanel, useTruthPanelState } from "@/features/truth-panel";
 import { useWorkspaceController } from "@/features/workspace/controller";
 import type { ModelRun, SynthesisReport } from "@/schema";
 
@@ -490,6 +491,7 @@ export function ProgressiveWorkspace() {
     displayMode,
     submitPrompt,
   } = useWorkspaceController();
+  const { isTruthPanelOpen } = useTruthPanelState();
 
   const handlePromptKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -505,7 +507,7 @@ export function ProgressiveWorkspace() {
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Module 7
+              Center Workspace
             </div>
             <div>
               <CardTitle className="text-3xl tracking-[-0.04em]">Progressive Workspace</CardTitle>
@@ -516,11 +518,16 @@ export function ProgressiveWorkspace() {
             </div>
           </div>
 
-          <span
-            className={`inline-flex self-start rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getModeBadgeClasses(displayMode)}`}
-          >
-            {formatModeLabel(displayMode)}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={toggleTruthPanel}>
+              {isTruthPanelOpen ? "Hide Truth Panel" : "Open Truth Panel"}
+            </Button>
+            <span
+              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getModeBadgeClasses(displayMode)}`}
+            >
+              {formatModeLabel(displayMode)}
+            </span>
+          </div>
         </div>
       </CardHeader>
 
