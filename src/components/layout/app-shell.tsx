@@ -51,12 +51,12 @@ export function AppShell() {
           </div>
           <div className="space-y-3">
             <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.04em] text-balance lg:text-6xl">
-              Alae now renders live diagnostics in the right-side truth panel.
+              Alae now closes the full Phase 1 loop with local conversation recovery.
             </h1>
             <p className="max-w-3xl text-base leading-7 text-muted-foreground lg:text-lg">
-              Module 8 turns the right rail into a real telemetry surface: keep provider access
-              available, collapse or expand the truth panel on demand, and surface runtime
-              failures without duplicating the center-column report.
+              Module 9 wires the MVP end to end: submit a prompt, persist the resulting node into
+              the reasoning tree, and restore the latest local conversation into the center
+              workspace and right-side truth panel on startup.
             </p>
           </div>
         </div>
@@ -66,13 +66,13 @@ export function AppShell() {
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               Current module
             </div>
-            <div className="mt-2 text-lg font-semibold">08. Right-side Truth Panel</div>
+            <div className="mt-2 text-lg font-semibold">09. Phase 1 End-to-End Hardening</div>
           </div>
           <div className="rounded-3xl border border-border/80 bg-card/75 px-5 py-4">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               Diagnostic focus
             </div>
-            <div className="mt-2 text-lg font-semibold">Telemetry, validation, and trace events</div>
+            <div className="mt-2 text-lg font-semibold">Persistence, recovery, and report continuity</div>
           </div>
         </div>
       </header>

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import {
   createReasoningTreeRepository,
 } from "@/features/reasoning-tree";
-import type { SynthesisReport } from "@/schema";
+import type { SynthesisReport, TruthPanelSnapshot } from "@/schema";
 
 const startedAt = "2026-03-17T11:00:00Z";
 const completedAt = "2026-03-17T11:01:00Z";
@@ -73,6 +73,34 @@ const reportFixture: SynthesisReport = {
     },
   ],
   createdAt,
+};
+
+const truthPanelSnapshotFixture: TruthPanelSnapshot = {
+  reportId: reportFixture.id,
+  generatedAt: reportFixture.createdAt,
+  runSummary: {
+    totalRuns: 1,
+    pendingRuns: 0,
+    runningRuns: 0,
+    completedRuns: 1,
+    failedRuns: 0,
+    aggregateInputTokens: 120,
+    aggregateOutputTokens: 80,
+    aggregateTotalTokens: 200,
+    aggregateLatencyMs: 980,
+    maxLatencyMs: 980,
+  },
+  runs: reportFixture.modelRuns,
+  validationIssues: [],
+  events: [
+    {
+      id: "trace-repo-1",
+      scope: "repository",
+      level: "info",
+      message: "Persisted node snapshot.",
+      occurredAt: reportFixture.createdAt,
+    },
+  ],
 };
 
 const cleanupTasks: Array<() => Promise<void>> = [];
@@ -143,6 +171,7 @@ describe("reasoning tree repository", () => {
       title: "Persist the model report",
       prompt: "Attach the synthesis report to the second node.",
       synthesisReport: reportFixture,
+      truthPanelSnapshot: truthPanelSnapshotFixture,
       createdAt: completedAt,
     });
 
@@ -154,10 +183,14 @@ describe("reasoning tree repository", () => {
     expect(rootNode.status).toBe("idle");
     expect(childNode.parentNodeId).toBe(rootNode.id);
     expect(childNode.status).toBe("completed");
+    expect(childNode.truthPanelSnapshot).toEqual(truthPanelSnapshotFixture);
     expect(reloadedConversation?.branches[0].rootNodeId).toBe(rootNode.id);
     expect(reloadedConversation?.branches[0].headNodeId).toBe(childNode.id);
     expect(reloadedConversation?.modelRuns).toHaveLength(1);
     expect(reloadedConversation?.modelRuns[0].id).toBe("run-judge-1");
+    expect(
+      reloadedConversation?.nodes.find((node) => node.id === childNode.id)?.truthPanelSnapshot,
+    ).toEqual(truthPanelSnapshotFixture);
   });
 
   it("forks from an existing node without copying prior nodes", async () => {
@@ -220,6 +253,7 @@ describe("reasoning tree repository", () => {
       title: "Persistent node",
       prompt: "Verify on-disk persistence.",
       synthesisReport: reportFixture,
+      truthPanelSnapshot: truthPanelSnapshotFixture,
       createdAt: completedAt,
     });
 
@@ -239,6 +273,61 @@ describe("reasoning tree repository", () => {
     expect(reloadedConversation?.nodes).toHaveLength(1);
     expect(reloadedConversation?.modelRuns).toHaveLength(1);
     expect(reloadedConversation?.conversation.id).toBe(createdConversation.conversation.id);
+    expect(reloadedConversation?.nodes[0]?.truthPanelSnapshot).toEqual(truthPanelSnapshotFixture);
+  });
+
+  it("loads the most recently updated conversation", async () => {
+    const { repository } = await createRepository();
+    const firstConversation = await repository.createConversation({
+      id: "conversation-latest-1",
+      createdAt,
+    });
+    const secondConversation = await repository.createConversation({
+      id: "conversation-latest-2",
+      createdAt: completedAt,
+    });
+
+    await repository.appendNode({
+      conversationId: secondConversation.conversation.id,
+      branchId: secondConversation.branches[0].id,
+      title: "Most recent node",
+      prompt: "Persist the latest conversation head.",
+      synthesisReport: reportFixture,
+      truthPanelSnapshot: truthPanelSnapshotFixture,
+      createdAt: "2026-03-17T11:03:00Z",
+    });
+
+    const latestConversation = await repository.loadLatestConversation();
+
+    expect(latestConversation?.conversation.id).toBe(secondConversation.conversation.id);
+    expect(latestConversation?.conversation.id).not.toBe(firstConversation.conversation.id);
+  });
+
+  it("persists failed nodes without synthesis reports", async () => {
+    const { repository } = await createRepository();
+    const loadedConversation = await repository.createConversation({
+      id: "conversation-failed-node-1",
+      createdAt,
+    });
+
+    const failedNode = await repository.appendNode({
+      conversationId: loadedConversation.conversation.id,
+      branchId: loadedConversation.branches[0].id,
+      title: "Failed synthesis attempt",
+      prompt: "This execution threw before producing a report.",
+      status: "failed",
+      createdAt: completedAt,
+    });
+
+    const reloadedConversation = await repository.loadConversation(
+      loadedConversation.conversation.id,
+    );
+
+    expect(failedNode.status).toBe("failed");
+    expect(failedNode.synthesisReport).toBeNull();
+    expect(failedNode.truthPanelSnapshot).toBeNull();
+    expect(reloadedConversation?.nodes[0]?.status).toBe("failed");
+    expect(reloadedConversation?.nodes[0]?.truthPanelSnapshot).toBeNull();
   });
 
   it("rejects missing records, mismatched branches, and duplicate identifiers", async () => {

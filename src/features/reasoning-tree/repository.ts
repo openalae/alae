@@ -9,6 +9,7 @@ import {
   ModelRunSchema,
   NodeStatusSchema,
   SynthesisReportSchema,
+  TruthPanelSnapshotSchema,
   type Conversation,
   type ConversationBranch,
   type ConversationNode,
@@ -44,6 +45,7 @@ const AppendNodeInputSchema = z
     prompt: NonEmptyStringSchema,
     status: NodeStatusSchema.optional(),
     synthesisReport: SynthesisReportSchema.nullable().optional(),
+    truthPanelSnapshot: TruthPanelSnapshotSchema.nullable().optional(),
     createdAt: IsoDatetimeSchema.optional(),
     updatedAt: IsoDatetimeSchema.optional(),
   })
@@ -89,6 +91,7 @@ type NodeRow = {
   prompt: string;
   status: NodeStatus;
   synthesisReportJson: string | null;
+  truthPanelSnapshotJson: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -123,6 +126,7 @@ export type ReasoningTreeRepository = {
   appendNode: (input: AppendNodeInput) => Promise<ConversationNode>;
   forkNode: (input: ForkNodeInput) => Promise<ConversationBranch>;
   loadConversation: (id: string) => Promise<LoadedConversation | null>;
+  loadLatestConversation: () => Promise<LoadedConversation | null>;
   close: () => Promise<void>;
 };
 
@@ -167,7 +171,7 @@ function mapBranchRow(row: BranchRow): ConversationBranch {
 }
 
 function mapNodeRow(row: NodeRow): ConversationNode {
-  const { synthesisReportJson, ...nodeFields } = row;
+  const { synthesisReportJson, truthPanelSnapshotJson, ...nodeFields } = row;
 
   return ConversationNodeSchema.parse({
     ...nodeFields,
@@ -177,6 +181,10 @@ function mapNodeRow(row: NodeRow): ConversationNode {
       synthesisReportJson === null
         ? null
         : SynthesisReportSchema.parse(deserializeJson(synthesisReportJson)),
+    truthPanelSnapshot:
+      truthPanelSnapshotJson === null
+        ? null
+        : TruthPanelSnapshotSchema.parse(deserializeJson(truthPanelSnapshotJson)),
   });
 }
 
@@ -243,6 +251,7 @@ async function getNodeById(db: Queryable, nodeId: string) {
         prompt,
         status,
         synthesis_report::text AS "synthesisReportJson",
+        truth_panel_snapshot::text AS "truthPanelSnapshotJson",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM conversation_nodes
@@ -400,6 +409,10 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
     const nodeId = value.id ?? createEntityId();
     const synthesisReport =
       value.synthesisReport === undefined ? null : SynthesisReportSchema.parse(value.synthesisReport);
+    const truthPanelSnapshot =
+      value.truthPanelSnapshot === undefined
+        ? null
+        : TruthPanelSnapshotSchema.parse(value.truthPanelSnapshot);
     const status = value.status ?? (synthesisReport === null ? "idle" : "completed");
     const db = await this.dbPromise;
 
@@ -427,6 +440,7 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
         prompt: value.prompt,
         status,
         synthesisReport,
+        truthPanelSnapshot,
         createdAt,
         updatedAt,
       });
@@ -442,6 +456,7 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
             prompt,
             status,
             synthesis_report,
+            truth_panel_snapshot,
             created_at,
             updated_at
           )
@@ -454,8 +469,9 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
             $6,
             $7,
             CAST($8 AS jsonb),
-            $9,
-            $10
+            CAST($9 AS jsonb),
+            $10,
+            $11
           )
         `,
         [
@@ -467,6 +483,7 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
           node.prompt,
           node.status,
           node.synthesisReport === null ? null : serializeJson(node.synthesisReport),
+          node.truthPanelSnapshot === null ? null : serializeJson(node.truthPanelSnapshot),
           node.createdAt,
           node.updatedAt,
         ],
@@ -625,6 +642,7 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
             prompt,
             status,
             synthesis_report::text AS "synthesisReportJson",
+            truth_panel_snapshot::text AS "truthPanelSnapshotJson",
             created_at::text AS "createdAt",
             updated_at::text AS "updatedAt"
           FROM conversation_nodes
@@ -663,6 +681,26 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
       nodes: nodesResult.rows.map(mapNodeRow),
       modelRuns: modelRunsResult.rows.map(mapModelRunRow),
     });
+  }
+
+  async loadLatestConversation(): Promise<LoadedConversation | null> {
+    const db = await this.dbPromise;
+    const result = await db.query<{ id: string }>(
+      `
+      SELECT id
+      FROM conversations
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 1
+      `,
+    );
+
+    const conversationId = result.rows[0]?.id;
+
+    if (!conversationId) {
+      return null;
+    }
+
+    return this.loadConversation(conversationId);
   }
 
   async close(): Promise<void> {

@@ -228,6 +228,7 @@ const rootNode: ConversationNode = {
   prompt: readyReport.prompt,
   status: "completed",
   synthesisReport: readyReport,
+  truthPanelSnapshot: null,
   createdAt: baseTimestamp,
   updatedAt: generatedTimestamp,
 };

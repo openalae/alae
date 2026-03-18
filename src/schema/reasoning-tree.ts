@@ -7,6 +7,7 @@ import {
   NonEmptyStringSchema,
 } from "@/schema/common";
 import { ModelRunSchema, SynthesisReportSchema } from "@/schema/consensus";
+import { TruthPanelSnapshotSchema } from "@/schema/truth-panel";
 
 export const ConversationSchema = z
   .object({
@@ -27,6 +28,7 @@ export const ConversationNodeSchema = z
     prompt: NonEmptyStringSchema,
     status: NodeStatusSchema,
     synthesisReport: SynthesisReportSchema.nullable(),
+    truthPanelSnapshot: TruthPanelSnapshotSchema.nullable(),
     createdAt: IsoDatetimeSchema,
     updatedAt: IsoDatetimeSchema,
   })
@@ -37,6 +39,14 @@ export const ConversationNodeSchema = z
         code: z.ZodIssueCode.custom,
         message: "completed nodes must include a synthesis report snapshot",
         path: ["synthesisReport"],
+      });
+    }
+
+    if (value.truthPanelSnapshot !== null && value.synthesisReport === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "truthPanelSnapshot requires a synthesis report snapshot",
+        path: ["truthPanelSnapshot"],
       });
     }
   });

@@ -194,6 +194,31 @@ function EmptyWorkspaceState(props: { mode: "mock" | "real" }) {
   );
 }
 
+function LoadingWorkspaceState() {
+  return (
+    <div className="space-y-6 rounded-[2rem] border border-border/80 bg-background/65 p-6">
+      <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
+        <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
+        Restoring Workspace
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
+          Loading the most recent local conversation.
+        </h3>
+        <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+          The workspace is hydrating the latest persisted branch head from PGLite before enabling
+          new submissions.
+        </p>
+      </div>
+
+      <div className="rounded-[1.5rem] border border-border/70 bg-card/75 px-5 py-4 text-sm leading-6 text-muted-foreground">
+        Prompt submission is temporarily disabled until the latest local state finishes loading.
+      </div>
+    </div>
+  );
+}
+
 function ModelRunsAccordion(props: { runs: ModelRun[] }) {
   const [openRunId, setOpenRunId] = useState<string | null>(props.runs[0]?.id ?? null);
 
@@ -487,7 +512,10 @@ export function ProgressiveWorkspace() {
     inputErrorMessage,
     latestSynthesisReport,
     runtimeErrorMessage,
+    bootstrapErrorMessage,
+    isBootstrapping,
     isRunning,
+    isBusy,
     displayMode,
     submitPrompt,
   } = useWorkspaceController();
@@ -545,11 +573,16 @@ export function ProgressiveWorkspace() {
               </div>
               <Button
                 type="button"
-                disabled={isRunning}
+                disabled={isBusy}
                 onClick={() => void submitPrompt()}
                 className="min-w-[160px]"
               >
-                {isRunning ? (
+                {isBootstrapping ? (
+                  <>
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Restoring...
+                  </>
+                ) : isRunning ? (
                   <>
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     Running...
@@ -565,7 +598,7 @@ export function ProgressiveWorkspace() {
               value={promptDraft}
               onChange={(event) => setPromptDraft(event.target.value)}
               onKeyDown={handlePromptKeyDown}
-              disabled={isRunning}
+              disabled={isBusy}
               spellCheck={false}
               rows={6}
               placeholder="Ask Alae to compare approaches, extract consensus, and surface the important conflicts."
@@ -580,13 +613,21 @@ export function ProgressiveWorkspace() {
           </div>
         ) : null}
 
+        {bootstrapErrorMessage ? (
+          <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-5 py-4 text-sm text-rose-950">
+            {bootstrapErrorMessage}
+          </div>
+        ) : null}
+
         {runtimeErrorMessage ? (
           <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-5 py-4 text-sm text-rose-950">
             {runtimeErrorMessage}
           </div>
         ) : null}
 
-        {latestSynthesisReport ? (
+        {isBootstrapping ? (
+          <LoadingWorkspaceState />
+        ) : latestSynthesisReport ? (
           <SynthesisReportView mode={displayMode} report={latestSynthesisReport} />
         ) : (
           <EmptyWorkspaceState mode={displayMode} />

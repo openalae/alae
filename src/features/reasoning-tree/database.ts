@@ -30,6 +30,7 @@ const REASONING_TREE_SCHEMA_SQL = `
     prompt TEXT NOT NULL,
     status TEXT NOT NULL,
     synthesis_report JSONB NULL,
+    truth_panel_snapshot JSONB NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
   );
@@ -70,6 +71,9 @@ const REASONING_TREE_SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_model_runs_report_id
     ON model_runs (report_id);
+
+  ALTER TABLE conversation_nodes
+    ADD COLUMN IF NOT EXISTS truth_panel_snapshot JSONB NULL;
 `;
 
 let defaultDatabasePromise: Promise<PGlite> | null = null;

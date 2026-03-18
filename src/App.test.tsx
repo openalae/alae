@@ -3,19 +3,49 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { createInitialAppStoreState } from "@/store";
 import { appStore } from "@/store/app-store";
-import type { SynthesisReport, TruthPanelSnapshot } from "@/schema";
+import type { LoadedConversation, SynthesisReport, TruthPanelSnapshot } from "@/schema";
 
-const { refreshApiKeyStatusesMock, saveApiKeyMock, removeApiKeyMock } = vi.hoisted(() => ({
-  refreshApiKeyStatusesMock: vi.fn(),
-  saveApiKeyMock: vi.fn(),
-  removeApiKeyMock: vi.fn(),
-}));
+const {
+  refreshApiKeyStatusesMock,
+  saveApiKeyMock,
+  removeApiKeyMock,
+  createReasoningTreeRepositoryMock,
+  repositoryMock,
+} = vi.hoisted(() => {
+  const repositoryMock = {
+    createConversation: vi.fn(),
+    appendNode: vi.fn(),
+    forkNode: vi.fn(),
+    loadConversation: vi.fn(),
+    loadLatestConversation: vi.fn(),
+    close: vi.fn(),
+  };
+
+  return {
+    refreshApiKeyStatusesMock: vi.fn(),
+    saveApiKeyMock: vi.fn(),
+    removeApiKeyMock: vi.fn(),
+    createReasoningTreeRepositoryMock: vi.fn(() => repositoryMock),
+    repositoryMock,
+  };
+});
 
 vi.mock("@/features/settings/api-key-bridge", () => ({
   refreshApiKeyStatuses: refreshApiKeyStatusesMock,
   saveApiKey: saveApiKeyMock,
   removeApiKey: removeApiKeyMock,
 }));
+
+vi.mock("@/features/reasoning-tree", async () => {
+  const actual = await vi.importActual<typeof import("@/features/reasoning-tree")>(
+    "@/features/reasoning-tree",
+  );
+
+  return {
+    ...actual,
+    createReasoningTreeRepository: createReasoningTreeRepositoryMock,
+  };
+});
 
 import App from "./App";
 
@@ -92,21 +122,70 @@ const snapshot: TruthPanelSnapshot = {
   events: [],
 };
 
+function createRestoredConversation(): LoadedConversation {
+  return {
+    conversation: {
+      id: "conversation-app-1",
+      title: "Inspect the latest telemetry.",
+      createdAt: report.createdAt,
+      updatedAt: report.createdAt,
+    },
+    branches: [
+      {
+        id: "branch-app-1",
+        conversationId: "conversation-app-1",
+        name: "main",
+        sourceNodeId: null,
+        rootNodeId: "node-app-1",
+        headNodeId: "node-app-1",
+        createdAt: report.createdAt,
+        updatedAt: report.createdAt,
+      },
+    ],
+    nodes: [
+      {
+        id: "node-app-1",
+        conversationId: "conversation-app-1",
+        branchId: "branch-app-1",
+        parentNodeId: null,
+        title: "Inspect the latest telemetry.",
+        prompt: report.prompt,
+        status: "completed",
+        synthesisReport: report,
+        truthPanelSnapshot: snapshot,
+        createdAt: report.createdAt,
+        updatedAt: report.createdAt,
+      },
+    ],
+    modelRuns: report.modelRuns,
+  };
+}
+
 describe("App", () => {
   beforeEach(() => {
     appStore.setState(createInitialAppStoreState());
     refreshApiKeyStatusesMock.mockReset();
     saveApiKeyMock.mockReset();
     removeApiKeyMock.mockReset();
+    createReasoningTreeRepositoryMock.mockClear();
+    repositoryMock.createConversation.mockReset();
+    repositoryMock.appendNode.mockReset();
+    repositoryMock.forkNode.mockReset();
+    repositoryMock.loadConversation.mockReset();
+    repositoryMock.loadLatestConversation.mockReset();
+    repositoryMock.close.mockReset();
+
     refreshApiKeyStatusesMock.mockResolvedValue(undefined);
+    repositoryMock.close.mockResolvedValue(undefined);
+    repositoryMock.loadLatestConversation.mockResolvedValue(null);
   });
 
-  it("renders the module 8 shell and refreshes provider status on mount", async () => {
+  it("renders the module 9 shell and refreshes provider status on mount", async () => {
     render(<App />);
 
     expect(
       screen.getByRole("heading", {
-        name: /Alae now renders live diagnostics in the right-side truth panel/i,
+        name: /Alae now closes the full Phase 1 loop with local conversation recovery/i,
       }),
     ).toBeInTheDocument();
     expect(
@@ -117,18 +196,21 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(refreshApiKeyStatusesMock).toHaveBeenCalledTimes(1);
+      expect(createReasoningTreeRepositoryMock).toHaveBeenCalledTimes(1);
     });
   });
 
   it("shares truth-panel toggle state between the workspace header and the right rail", async () => {
-    appStore.setState(
-      createInitialAppStoreState({
-        latestSynthesisReport: report,
-        truthPanelSnapshot: snapshot,
-      }),
-    );
+    repositoryMock.loadLatestConversation.mockResolvedValue(createRestoredConversation());
 
     render(<App />);
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 3,
+        name: /The report rendered successfully/i,
+      }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Truth Panel" }));
 
