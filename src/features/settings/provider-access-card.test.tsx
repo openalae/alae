@@ -4,14 +4,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createInitialAppStoreState } from "@/store";
 import { appStore } from "@/store/app-store";
 
-const { refreshApiKeyStatusesMock, saveApiKeyMock, removeApiKeyMock } = vi.hoisted(() => ({
-  refreshApiKeyStatusesMock: vi.fn(),
+const { saveApiKeyMock, removeApiKeyMock } = vi.hoisted(() => ({
   saveApiKeyMock: vi.fn(),
   removeApiKeyMock: vi.fn(),
 }));
 
 vi.mock("@/features/settings/api-key-bridge", () => ({
-  refreshApiKeyStatuses: refreshApiKeyStatusesMock,
   saveApiKey: saveApiKeyMock,
   removeApiKey: removeApiKeyMock,
 }));
@@ -20,44 +18,46 @@ import { ProviderAccessCard } from "@/features/settings/provider-access-card";
 
 describe("ProviderAccessCard", () => {
   beforeEach(() => {
-    refreshApiKeyStatusesMock.mockReset();
     saveApiKeyMock.mockReset();
     removeApiKeyMock.mockReset();
-    appStore.setState(createInitialAppStoreState());
-
-    refreshApiKeyStatusesMock.mockImplementation(async () => {
-      appStore.getState().setApiKeyStatuses({
-        openai: {
-          configured: true,
-          lastCheckedAt: "2026-03-17T00:00:00.000Z",
-          error: null,
+    appStore.setState(
+      createInitialAppStoreState({
+        apiKeyStatuses: {
+          openai: {
+            configured: true,
+            lastCheckedAt: "2026-03-17T00:00:00.000Z",
+            error: null,
+          },
+          anthropic: {
+            configured: false,
+            lastCheckedAt: "2026-03-17T00:00:00.000Z",
+            error: null,
+          },
+          google: {
+            configured: false,
+            lastCheckedAt: "2026-03-17T00:00:00.000Z",
+            error: null,
+          },
         },
-        anthropic: {
-          configured: false,
-          lastCheckedAt: "2026-03-17T00:00:00.000Z",
-          error: null,
-        },
-        google: {
-          configured: false,
-          lastCheckedAt: "2026-03-17T00:00:00.000Z",
-          error: null,
-        },
-      });
-    });
+      }),
+    );
   });
 
-  it("renders all configured providers and refreshes on mount", async () => {
+  it("renders all configured providers without triggering page-level refresh work", () => {
     render(<ProviderAccessCard />);
 
     expect(screen.getByRole("heading", { name: "Provider Access" })).toBeInTheDocument();
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
     expect(screen.getByText("Google")).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(refreshApiKeyStatusesMock).toHaveBeenCalledTimes(1);
-    });
     expect(screen.getByText("Configured")).toBeInTheDocument();
+  });
+
+  it("renders panel-level refresh state from the shell", () => {
+    render(<ProviderAccessCard isRefreshing panelError="native refresh failed" />);
+
+    expect(screen.getByText("native refresh failed")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Refreshing provider statuses")).toHaveLength(3);
   });
 
   it("blocks empty save submissions", async () => {
@@ -92,11 +92,6 @@ describe("ProviderAccessCard", () => {
   });
 
   it("updates the row after deletion", async () => {
-    appStore.getState().setApiKeyStatus("openai", {
-      configured: true,
-      lastCheckedAt: "2026-03-17T00:00:00.000Z",
-      error: null,
-    });
     removeApiKeyMock.mockImplementation(async (provider: "openai") => {
       appStore.getState().setApiKeyStatus(provider, {
         configured: false,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { KeyRound, LoaderCircle, ShieldCheck, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,7 @@ import {
   providerDefinitions,
   type SupportedProviderId,
 } from "@/features/settings/providers";
-import {
-  refreshApiKeyStatuses,
-  removeApiKey,
-  saveApiKey,
-} from "@/features/settings/api-key-bridge";
+import { removeApiKey, saveApiKey } from "@/features/settings/api-key-bridge";
 import { useAppStore } from "@/store";
 
 type ProviderAction = "idle" | "saving" | "deleting";
@@ -43,7 +39,15 @@ function getErrorMessage(error: unknown) {
   return "Unexpected secure store error.";
 }
 
-export function ProviderAccessCard() {
+type ProviderAccessCardProps = {
+  isRefreshing?: boolean;
+  panelError?: string | null;
+};
+
+export function ProviderAccessCard({
+  isRefreshing = false,
+  panelError = null,
+}: ProviderAccessCardProps) {
   const apiKeyStatuses = useAppStore((state) => state.apiKeyStatuses);
   const [inputValues, setInputValues] = useState<Record<SupportedProviderId, string>>(() =>
     buildProviderRecord(() => ""),
@@ -54,28 +58,6 @@ export function ProviderAccessCard() {
   const [feedbackMessages, setFeedbackMessages] = useState<
     Record<SupportedProviderId, string | null>
   >(() => buildProviderRecord(() => null));
-  const [isRefreshing, setIsRefreshing] = useState(true);
-  const [panelError, setPanelError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    refreshApiKeyStatuses()
-      .catch((error) => {
-        if (active) {
-          setPanelError(getErrorMessage(error));
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setIsRefreshing(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const setFeedbackMessage = (provider: SupportedProviderId, message: string | null) => {
     setFeedbackMessages((current) => ({
@@ -105,7 +87,6 @@ export function ProviderAccessCard() {
       return;
     }
 
-    setPanelError(null);
     setRowAction(provider, "saving");
 
     try {
@@ -124,7 +105,6 @@ export function ProviderAccessCard() {
   };
 
   const handleDelete = async (provider: SupportedProviderId) => {
-    setPanelError(null);
     setRowAction(provider, "deleting");
 
     try {

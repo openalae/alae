@@ -1,41 +1,55 @@
-import {
-  ArrowUpRight,
-  KeyRound,
-  LayoutPanelTop,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { KeyRound, ShieldCheck, Sparkles } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { refreshApiKeyStatuses } from "@/features/settings/api-key-bridge";
 import { ProviderAccessCard } from "@/features/settings";
+import { ProgressiveWorkspace } from "@/features/workspace";
 
-const installedStack = [
-  "Tauri 2 + Rust shell",
-  "React 19 + Vite + TypeScript",
-  "Tailwind v4 + shadcn base",
-  "Zod schema contracts + Zustand slices",
-  "Native secure-store bridge",
-  "Vitest + React Testing Library",
-];
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
 
-const queuedModules = [
-  "PGLite conversation tree",
-  "Consensus orchestration",
-  "Progressive workspace",
-  "Truth panel telemetry",
-];
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "Unable to refresh provider access state.";
+}
 
 export function AppShell() {
+  const [isRefreshingProviders, setIsRefreshingProviders] = useState(true);
+  const [providerPanelError, setProviderPanelError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    refreshApiKeyStatuses()
+      .catch((error) => {
+        if (active) {
+          setProviderPanelError(getErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsRefreshingProviders(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col px-6 py-8 lg:px-8">
+    <div className="mx-auto flex min-h-screen w-full max-w-[1520px] flex-col px-6 py-8 lg:px-8">
       <header className="flex flex-col gap-6 border-b border-border/70 pb-8 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/70 px-4 py-2 text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">
@@ -43,13 +57,13 @@ export function AppShell() {
             Phase 1 MVP
           </div>
           <div className="space-y-3">
-            <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.04em] text-balance lg:text-6xl">
-              Alae now secures provider access in the desktop shell.
+            <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.04em] text-balance lg:text-6xl">
+              Alae now centers execution on a progressive synthesis workspace.
             </h1>
-            <p className="max-w-2xl text-base leading-7 text-muted-foreground lg:text-lg">
-              Modules 1 through 4 are in place: scaffold, schema contracts, global state,
-              and native API key management. The next round can connect local storage
-              without revisiting security boundaries.
+            <p className="max-w-3xl text-base leading-7 text-muted-foreground lg:text-lg">
+              Module 7 replaces the shell placeholder with a real center-column workflow:
+              compose a prompt, run synthesis in `Auto`, and keep raw model output behind
+              deliberate drill-down disclosure.
             </p>
           </div>
         </div>
@@ -59,109 +73,56 @@ export function AppShell() {
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               Current module
             </div>
-            <div className="mt-2 text-lg font-semibold">04. Secure API Key Bridge</div>
+            <div className="mt-2 text-lg font-semibold">07. Progressive Workspace</div>
           </div>
           <div className="rounded-3xl border border-border/80 bg-card/75 px-5 py-4">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Target surface
+              Runtime mode
             </div>
-            <div className="mt-2 text-lg font-semibold">Desktop shell + secure providers</div>
+            <div className="mt-2 text-lg font-semibold">Auto: real when fully configured</div>
           </div>
         </div>
       </header>
 
-      <main className="grid flex-1 gap-6 py-8 xl:grid-cols-[minmax(0,1.65fr)_380px]">
-        <Card className="overflow-hidden">
-          <CardHeader className="border-b border-border/70 bg-card/85">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-2">
-                <CardTitle className="flex items-center gap-3 text-2xl">
-                  <LayoutPanelTop className="h-5 w-5 text-primary" />
-                  Workspace Foundation
-                </CardTitle>
-                <CardDescription>
-                  The shell stays focused on MVP foundations while native credential storage
-                  is wired end to end.
-                </CardDescription>
-              </div>
-              <Button variant="outline" size="sm" disabled>
-                Module 4 complete
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-6 pt-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <section className="rounded-[1.5rem] border border-border/70 bg-background/75 p-5">
-              <div className="text-sm font-medium text-muted-foreground">Installed foundation</div>
-              <ul className="mt-4 grid gap-3">
-                {installedStack.map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-sm"
-                  >
-                    <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </section>
+      <main className="grid flex-1 gap-6 py-8 xl:grid-cols-[minmax(0,1.95fr)_320px]">
+        <ProgressiveWorkspace />
 
-            <section className="rounded-[1.5rem] border border-dashed border-border/80 bg-card/60 p-5">
-              <div className="text-sm font-medium text-muted-foreground">Queued MVP modules</div>
-              <ul className="mt-4 space-y-3 text-sm text-foreground">
-                {queuedModules.map((item, index) => (
-                  <li key={item} className="flex items-start gap-3">
-                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
-                      {index + 5}
-                    </span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          </CardContent>
-          <CardFooter className="border-t border-border/70 pt-6">
-            <Button variant="default" disabled>
-              PGLite conversation tree next
-            </Button>
-            <Button variant="ghost" disabled>
-              Native credentials wired and verified
-              <ArrowUpRight className="h-4 w-4" />
-            </Button>
-          </CardFooter>
-        </Card>
-
-        <div className="space-y-6">
-          <ProviderAccessCard />
+        <div className="space-y-5">
+          <ProviderAccessCard
+            isRefreshing={isRefreshingProviders}
+            panelError={providerPanelError}
+          />
 
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-3">
                 <ShieldCheck className="h-5 w-5 text-primary" />
-                Truth Panel Stub
+                Truth Panel Preview
               </CardTitle>
               <CardDescription>
-                This column still reserves the final Phase 1 inspector surface while model
-                telemetry and trace data remain out of scope for module 4.
+                Module 8 will consume the stored truth snapshot and render runtime telemetry in
+                this rail. Module 7 only reserves the surface and keeps the focus on the center
+                report.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
                 <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Runtime
+                  Run summary
                 </div>
-                <div className="mt-3 text-sm font-medium">Awaiting multi-model orchestration</div>
+                <div className="mt-3 text-sm font-medium">Pending snapshot visualization</div>
               </div>
               <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
                 <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                   Token telemetry
                 </div>
-                <div className="mt-3 text-sm font-medium">Pending model run records</div>
+                <div className="mt-3 text-sm font-medium">Pending aggregate token charts</div>
               </div>
               <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
                 <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Validation traces
+                  Trace events
                 </div>
-                <div className="mt-3 text-sm font-medium">Pending Zod contracts</div>
+                <div className="mt-3 text-sm font-medium">Pending validation and runtime trace UI</div>
               </div>
             </CardContent>
           </Card>
@@ -170,12 +131,12 @@ export function AppShell() {
             <CardHeader>
               <CardTitle className="flex items-center gap-3 text-lg">
                 <KeyRound className="h-5 w-5 text-primary" />
-                Security boundary
+                Provider boundary
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
-              <p>Only provider configuration state lives in Zustand.</p>
-              <p>Raw API keys stay in the OS secure store and are fetched on demand only.</p>
+              <p>API keys remain in the OS secure store and never enter Zustand.</p>
+              <p>The workspace only inspects provider configuration status to decide real vs mock execution.</p>
             </CardContent>
           </Card>
         </div>
