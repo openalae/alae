@@ -525,7 +525,7 @@ export function useWorkspaceController() {
     }
 
     if (!trimmedPrompt) {
-      setInputErrorMessage("Prompt is required before running synthesis.");
+      setInputErrorMessage("Enter a question before starting analysis.");
       return;
     }
 

@@ -151,16 +151,16 @@ export function AppShell() {
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/70 px-4 py-2 text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Module 10
+            Local Analysis Assistant
           </div>
           <div className="space-y-3">
             <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.04em] text-balance lg:text-6xl">
-              Alae now exposes the reasoning tree as a real AI Git Explorer.
+              Ask one question, compare multiple model answers, and keep the history.
             </h1>
             <p className="max-w-3xl text-base leading-7 text-muted-foreground lg:text-lg">
-              Module 10 turns the local conversation graph into a browsable, forkable workflow:
-              switch sessions, inspect branch history, recover historical snapshots, and continue
-              from any node without losing the original path.
+              Alae helps you explore a bug, decision, or tradeoff from several model
+              perspectives, save each run locally, and branch from any earlier step when you want
+              to try a new direction.
             </p>
           </div>
         </div>
@@ -168,15 +168,17 @@ export function AppShell() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-3xl border border-border/80 bg-card/75 px-5 py-4">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Current module
+              Start here
             </div>
-            <div className="mt-2 text-lg font-semibold">10. AI Git Explorer</div>
+            <div className="mt-2 text-lg font-semibold">Ask a question in the center panel</div>
           </div>
           <div className="rounded-3xl border border-border/80 bg-card/75 px-5 py-4">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Diagnostic focus
+              What you get
             </div>
-            <div className="mt-2 text-lg font-semibold">History navigation, branch recovery, and fork-first continuation</div>
+            <div className="mt-2 text-lg font-semibold">
+              A combined answer, disagreements, and saved history
+            </div>
           </div>
         </div>
       </header>

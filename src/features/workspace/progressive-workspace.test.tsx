@@ -372,13 +372,13 @@ describe("ProgressiveWorkspace", () => {
 
     render(<ProgressiveWorkspace />);
 
-    expect(screen.getByText("Loading the most recent local conversation.")).toBeInTheDocument();
+    expect(screen.getByText("Loading your latest saved analysis.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Restoring/i })).toBeDisabled();
-    expect(screen.getByLabelText("Prompt")).toBeDisabled();
+    expect(screen.getByLabelText("Question")).toBeDisabled();
 
     bootstrapDeferred.resolve(null);
 
-    const promptField = await screen.findByLabelText("Prompt");
+    const promptField = await screen.findByLabelText("Question");
     await waitFor(() => {
       expect(promptField).not.toBeDisabled();
     });
@@ -445,9 +445,9 @@ describe("ProgressiveWorkspace", () => {
       }),
     ).toBeInTheDocument();
 
-    const promptField = screen.getByLabelText("Prompt");
+    const promptField = screen.getByLabelText("Question");
     fireEvent.change(promptField, { target: { value: "Retry module 9." } });
-    fireEvent.click(screen.getByRole("button", { name: "Run synthesis" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze question" }));
 
     expect(await screen.findByText("transport down")).toBeInTheDocument();
 
@@ -492,13 +492,13 @@ describe("ProgressiveWorkspace", () => {
       await screen.findByText("Unable to restore the latest local conversation. idb unavailable"),
     ).toBeInTheDocument();
 
-    const promptField = screen.getByLabelText("Prompt");
+    const promptField = screen.getByLabelText("Question");
     await waitFor(() => {
       expect(promptField).not.toBeDisabled();
     });
 
     fireEvent.change(promptField, { target: { value: "Build module 9 after restore failure." } });
-    fireEvent.click(screen.getByRole("button", { name: "Run synthesis" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze question" }));
 
     expect(
       await screen.findByRole("heading", {

@@ -120,19 +120,19 @@ export function ReasoningTreeExplorer({
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
               <PanelLeft className="h-3.5 w-3.5 text-primary" />
-              Explorer
+              History
             </div>
             <div>
-              <CardTitle className="text-2xl tracking-[-0.03em]">AI Git Explorer</CardTitle>
+              <CardTitle className="text-2xl tracking-[-0.03em]">Analysis history</CardTitle>
               <CardDescription className="mt-2 max-w-sm">
-                Browse conversations, switch branches, and fork from any historical node.
+                Reopen saved questions, switch paths, and continue from any earlier step.
               </CardDescription>
             </div>
           </div>
 
           <Button type="button" variant="outline" size="sm" onClick={onForkSelectedNode} disabled={isForkDisabled}>
             <GitFork className="h-4 w-4" />
-            Fork Selected Node
+            Branch from selected step
           </Button>
         </div>
       </CardHeader>
@@ -141,13 +141,13 @@ export function ReasoningTreeExplorer({
         <section className="space-y-3">
           <SectionHeader
             icon={<History className="h-4 w-4" />}
-            title="Conversations"
-            description="Pick a saved session to inspect its tree."
+            title="Saved analyses"
+            description="Pick a saved question to reopen its history."
           />
           <div className="space-y-2">
             {conversations.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-border/80 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-                No conversations yet.
+                No saved analyses yet.
               </div>
             ) : (
               conversations.map((conversation) => {
@@ -196,8 +196,8 @@ export function ReasoningTreeExplorer({
         <section className="space-y-3">
           <SectionHeader
             icon={<GitBranch className="h-4 w-4" />}
-            title="Branches"
-            description="Jump to the active branch or inspect an alternate path."
+            title="Paths"
+            description="Switch between the main path and any alternate branch."
           />
           <div className="space-y-2">
             {branches.length === 0 ? (
@@ -243,8 +243,8 @@ export function ReasoningTreeExplorer({
         <section className="space-y-3">
           <SectionHeader
             icon={<Sparkles className="h-4 w-4" />}
-            title="Nodes"
-            description="Historical checkpoints in the selected branch."
+            title="Saved steps"
+            description="Each step keeps the question and, when available, the saved answer."
           />
           <div className="space-y-2">
             {nodes.length === 0 ? (

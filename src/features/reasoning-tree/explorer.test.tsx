@@ -52,9 +52,9 @@ describe("ReasoningTreeExplorer", () => {
       />,
     );
 
-    expect(screen.getByText("Conversations")).toBeInTheDocument();
-    expect(screen.getByText("Branches")).toBeInTheDocument();
-    expect(screen.getByText("Nodes")).toBeInTheDocument();
+    expect(screen.getByText("Saved analyses")).toBeInTheDocument();
+    expect(screen.getByText("Paths")).toBeInTheDocument();
+    expect(screen.getByText("Saved steps")).toBeInTheDocument();
   });
 
   it("shows node badges and triggers fork actions", async () => {
@@ -104,9 +104,8 @@ describe("ReasoningTreeExplorer", () => {
     expect(screen.getByText("report saved")).toBeInTheDocument();
     expect(screen.getByText("no report")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /fork selected node/i }));
+    await user.click(screen.getByRole("button", { name: /branch from selected step/i }));
 
     expect(onForkSelectedNode).toHaveBeenCalledTimes(1);
   });
 });
-

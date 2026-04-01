@@ -46,11 +46,11 @@ describe("ProviderAccessCard", () => {
   it("renders all configured providers without triggering page-level refresh work", () => {
     render(<ProviderAccessCard />);
 
-    expect(screen.getByRole("heading", { name: "Provider Access" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Model providers" })).toBeInTheDocument();
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
     expect(screen.getByText("Google")).toBeInTheDocument();
-    expect(screen.getByText("Configured")).toBeInTheDocument();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
   });
 
   it("renders panel-level refresh state from the shell", () => {
@@ -63,7 +63,7 @@ describe("ProviderAccessCard", () => {
   it("blocks empty save submissions", async () => {
     render(<ProviderAccessCard />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Save key" })[0]);
 
     expect(saveApiKeyMock).not.toHaveBeenCalled();
     expect(await screen.findByText("API key is required.")).toBeInTheDocument();
@@ -82,13 +82,13 @@ describe("ProviderAccessCard", () => {
 
     const input = screen.getAllByLabelText("API key")[0];
     fireEvent.change(input, { target: { value: "sk-test" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Save key" })[0]);
 
     await waitFor(() => {
       expect(saveApiKeyMock).toHaveBeenCalledWith("openai", "sk-test");
     });
     expect(input).toHaveValue("");
-    expect(screen.getByText("Saved to secure store.")).toBeInTheDocument();
+    expect(screen.getByText("API key saved.")).toBeInTheDocument();
   });
 
   it("updates the row after deletion", async () => {
@@ -102,11 +102,11 @@ describe("ProviderAccessCard", () => {
 
     render(<ProviderAccessCard />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Delete/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /Remove key/i })[0]);
 
     await waitFor(() => {
       expect(removeApiKeyMock).toHaveBeenCalledWith("openai");
     });
-    expect(screen.getByText("Removed from secure store.")).toBeInTheDocument();
+    expect(screen.getByText("API key removed.")).toBeInTheDocument();
   });
 });

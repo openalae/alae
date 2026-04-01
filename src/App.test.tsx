@@ -183,22 +183,18 @@ describe("App", () => {
     repositoryMock.loadLatestConversation.mockResolvedValue(null);
   });
 
-  it("renders the module 10 shell and refreshes provider status on mount", async () => {
+  it("renders the product shell and refreshes provider status on mount", async () => {
     render(<App />);
 
     expect(
       screen.getByRole("heading", {
-        name: /Alae now exposes the reasoning tree as a real AI Git Explorer/i,
+        name: /Ask one question, compare multiple model answers, and keep the history/i,
       }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { level: 2, name: "AI Git Explorer" }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("heading", { level: 2, name: "Progressive Workspace" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Provider Access" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Truth Panel" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Analysis history" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "Ask and Analyze" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Model providers" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Model status" })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(refreshApiKeyStatusesMock).toHaveBeenCalledTimes(1);
@@ -228,18 +224,18 @@ describe("App", () => {
       }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Truth Panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Model Status" }));
 
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(true);
     });
-    expect(screen.getByRole("heading", { name: "Run summary" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide Truth Panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hide Model Status" }));
 
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(false);
     });
-    expect(screen.queryByRole("heading", { name: "Run summary" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Overview" })).not.toBeInTheDocument();
   });
 });

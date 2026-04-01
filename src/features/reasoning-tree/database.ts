@@ -1,6 +1,10 @@
-import { PGlite } from "@electric-sql/pglite";
+import { PGlite, type PGliteOptions } from "@electric-sql/pglite";
+import pgliteDataUrl from "../../../node_modules/@electric-sql/pglite/dist/pglite.data?url";
+import pgliteWasmUrl from "../../../node_modules/@electric-sql/pglite/dist/pglite.wasm?url";
 
 export const DEFAULT_REASONING_TREE_DATA_DIR = "idb://alae-reasoning-tree-v1";
+
+type PGliteRuntimeAssets = Pick<PGliteOptions, "fsBundle" | "wasmModule">;
 
 const REASONING_TREE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS conversations (
@@ -77,6 +81,58 @@ const REASONING_TREE_SCHEMA_SQL = `
 `;
 
 let defaultDatabasePromise: Promise<PGlite> | null = null;
+let defaultDatabaseLeaseCount = 0;
+let defaultDatabaseCloseTimer: ReturnType<typeof setTimeout> | null = null;
+let runtimeAssetsPromise: Promise<PGliteRuntimeAssets> | null = null;
+
+function runsInBrowserRuntime() {
+  return typeof window !== "undefined";
+}
+
+async function fetchAsset(url: string, label: string): Promise<Response> {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Unable to load ${label}. ${response.status} ${response.statusText}`);
+  }
+
+  return response;
+}
+
+async function compileWasmModule(response: Response): Promise<WebAssembly.Module> {
+  if (typeof WebAssembly.compileStreaming === "function") {
+    try {
+      return await WebAssembly.compileStreaming(response.clone());
+    } catch {
+      // Some runtimes do not serve wasm with a compatible MIME type in development.
+    }
+  }
+
+  return WebAssembly.compile(await response.arrayBuffer());
+}
+
+async function loadRuntimeAssets(): Promise<PGliteRuntimeAssets> {
+  if (!runsInBrowserRuntime()) {
+    throw new Error("Bundled PGlite assets are only required in browser runtimes.");
+  }
+
+  if (runtimeAssetsPromise === null) {
+    runtimeAssetsPromise = Promise.all([
+      fetchAsset(pgliteDataUrl, "PGlite filesystem bundle"),
+      fetchAsset(pgliteWasmUrl, "PGlite wasm module"),
+    ])
+      .then(async ([fsBundleResponse, wasmResponse]) => ({
+        fsBundle: await fsBundleResponse.blob(),
+        wasmModule: await compileWasmModule(wasmResponse),
+      }))
+      .catch((error: unknown) => {
+        runtimeAssetsPromise = null;
+        throw error;
+      });
+  }
+
+  return runtimeAssetsPromise;
+}
 
 export async function bootstrapReasoningTreeDatabase(db: PGlite): Promise<PGlite> {
   await db.waitReady;
@@ -87,11 +143,32 @@ export async function bootstrapReasoningTreeDatabase(db: PGlite): Promise<PGlite
 export async function createReasoningTreeDatabase(
   dataDir = DEFAULT_REASONING_TREE_DATA_DIR,
 ): Promise<PGlite> {
-  const db = new PGlite(dataDir);
+  const db = runsInBrowserRuntime()
+    ? new PGlite(dataDir, await loadRuntimeAssets())
+    : new PGlite(dataDir);
+
   return bootstrapReasoningTreeDatabase(db);
 }
 
 export function getDefaultReasoningTreeDatabase(): Promise<PGlite> {
+  if (runsInBrowserRuntime()) {
+    if (defaultDatabasePromise === null) {
+      defaultDatabasePromise = createReasoningTreeDatabase().catch((error) => {
+        defaultDatabasePromise = null;
+        throw error;
+      });
+    }
+
+    return defaultDatabasePromise;
+  }
+
+  if (defaultDatabaseCloseTimer !== null) {
+    clearTimeout(defaultDatabaseCloseTimer);
+    defaultDatabaseCloseTimer = null;
+  }
+
+  defaultDatabaseLeaseCount += 1;
+
   if (defaultDatabasePromise === null) {
     defaultDatabasePromise = createReasoningTreeDatabase().catch((error) => {
       defaultDatabasePromise = null;
@@ -103,11 +180,52 @@ export function getDefaultReasoningTreeDatabase(): Promise<PGlite> {
 }
 
 export async function closeDefaultReasoningTreeDatabase(): Promise<void> {
-  if (defaultDatabasePromise === null) {
+  if (runsInBrowserRuntime()) {
     return;
   }
 
-  const db = await defaultDatabasePromise;
-  defaultDatabasePromise = null;
-  await db.close();
+  if (defaultDatabaseLeaseCount > 0) {
+    defaultDatabaseLeaseCount -= 1;
+  }
+
+  if (defaultDatabaseLeaseCount > 0 || defaultDatabasePromise === null) {
+    return;
+  }
+
+  const closeDefaultDatabaseNow = async () => {
+    const dbPromise = defaultDatabasePromise;
+    defaultDatabasePromise = null;
+
+    if (dbPromise === null) {
+      return;
+    }
+
+    const db = await dbPromise;
+
+    if (db.closed) {
+      return;
+    }
+
+    await db.close();
+  };
+
+  if (runsInBrowserRuntime()) {
+    if (defaultDatabaseCloseTimer !== null) {
+      return;
+    }
+
+    defaultDatabaseCloseTimer = setTimeout(() => {
+      defaultDatabaseCloseTimer = null;
+
+      if (defaultDatabaseLeaseCount > 0 || defaultDatabasePromise === null) {
+        return;
+      }
+
+      void closeDefaultDatabaseNow().catch(() => undefined);
+    }, 0);
+
+    return;
+  }
+
+  await closeDefaultDatabaseNow();
 }

@@ -194,9 +194,9 @@ describe("TruthPanel", () => {
   it("renders an empty state instead of the old preview copy", () => {
     render(<TruthPanel />);
 
-    expect(screen.getByRole("heading", { name: "Truth Panel" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Model status" })).toBeInTheDocument();
     expect(
-      screen.getByText(/Run a synthesis to populate telemetry, validation, and trace diagnostics/i),
+      screen.getByText(/Run an analysis to see model calls, errors, and validation details/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Truth Panel Preview/i)).not.toBeInTheDocument();
   });
@@ -212,16 +212,16 @@ describe("TruthPanel", () => {
 
     render(<TruthPanel />);
 
-    expect(screen.getByRole("heading", { name: "Run summary" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Validation issues" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Trace events" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Model calls" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Output issues" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Activity log" })).toBeInTheDocument();
     expect(screen.getByText("Aggregate input")).toBeInTheDocument();
     expect(screen.getByText("Schema validation failed")).toBeInTheDocument();
     expect(screen.getByText("Judge run completed successfully.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Hide details/i }));
-    expect(screen.queryByRole("heading", { name: "Run summary" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Overview" })).not.toBeInTheDocument();
     expect(screen.getByText("Aggregate total")).toBeInTheDocument();
   });
 
@@ -254,8 +254,8 @@ describe("TruthPanel", () => {
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(true);
     });
-    expect(screen.getByText("Report failed")).toBeInTheDocument();
-    expect(screen.getByText("Runs")).toBeInTheDocument();
+    expect(screen.getByText("Latest result failed")).toBeInTheDocument();
+    expect(screen.getByText("Model calls")).toBeInTheDocument();
   });
 
   it("does not auto open for partial reports", async () => {

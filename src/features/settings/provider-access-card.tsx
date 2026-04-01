@@ -96,7 +96,7 @@ export function ProviderAccessCard({
         ...current,
         [provider]: "",
       }));
-      setFeedbackMessage(provider, "Saved to secure store.");
+      setFeedbackMessage(provider, "API key saved.");
     } catch (error) {
       setFeedbackMessage(provider, getErrorMessage(error));
     } finally {
@@ -114,7 +114,7 @@ export function ProviderAccessCard({
         ...current,
         [provider]: "",
       }));
-      setFeedbackMessage(provider, "Removed from secure store.");
+      setFeedbackMessage(provider, "API key removed.");
     } catch (error) {
       setFeedbackMessage(provider, getErrorMessage(error));
     } finally {
@@ -127,11 +127,11 @@ export function ProviderAccessCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-3">
           <KeyRound className="h-5 w-5 text-primary" />
-          Provider Access
+          Model providers
         </CardTitle>
         <CardDescription>
-          API keys stay in the native secure store. The app only tracks configuration
-          status in memory.
+          Add API keys to switch from Demo mode to live model calls. Keys stay in the native
+          secure store.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -148,7 +148,7 @@ export function ProviderAccessCard({
             error: null,
           };
           const isBusy = rowActions[provider.id] !== "idle";
-          const statusLabel = status.configured ? "Configured" : "Not configured";
+          const statusLabel = status.configured ? "Ready" : "Missing key";
           const statusClasses = status.configured
             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900"
             : "border-border/80 bg-background/70 text-muted-foreground";
@@ -156,8 +156,8 @@ export function ProviderAccessCard({
             feedbackMessages[provider.id] ??
             status.error ??
             (status.lastCheckedAt
-              ? `Last checked ${status.lastCheckedAt}`
-              : "No secure credential stored yet.");
+              ? `Checked ${status.lastCheckedAt}`
+              : "No key saved yet.");
 
           return (
             <section
@@ -203,7 +203,7 @@ export function ProviderAccessCard({
 
                 <div className="flex flex-wrap gap-3">
                   <Button disabled={isBusy} onClick={() => void handleSave(provider.id)}>
-                    {rowActions[provider.id] === "saving" ? "Saving..." : "Save"}
+                    {rowActions[provider.id] === "saving" ? "Saving..." : "Save key"}
                   </Button>
                   <Button
                     variant="outline"
@@ -211,7 +211,7 @@ export function ProviderAccessCard({
                     onClick={() => void handleDelete(provider.id)}
                   >
                     <Trash2 className="h-4 w-4" />
-                    {rowActions[provider.id] === "deleting" ? "Removing..." : "Delete"}
+                    {rowActions[provider.id] === "deleting" ? "Removing..." : "Remove key"}
                   </Button>
                 </div>
               </div>

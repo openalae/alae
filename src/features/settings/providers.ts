@@ -13,19 +13,19 @@ export const providerDefinitions: ProviderDefinition[] = [
   {
     id: "openai",
     label: "OpenAI",
-    description: "Strong-model routing and structured synthesis.",
+    description: "General-purpose reasoning and structured answers.",
     placeholder: "sk-...",
   },
   {
     id: "anthropic",
     label: "Anthropic",
-    description: "Cross-check reasoning and high-context drafting.",
+    description: "Alternative perspective for long-form reasoning.",
     placeholder: "sk-ant-...",
   },
   {
     id: "google",
     label: "Google",
-    description: "Fast comparative runs for wider model spread.",
+    description: "Fast comparative pass for broader coverage.",
     placeholder: "AIza...",
   },
 ];

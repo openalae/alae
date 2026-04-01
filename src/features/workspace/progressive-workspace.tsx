@@ -25,8 +25,26 @@ import {
 } from "@/features/workspace/controller";
 import type { ConversationNode, ModelRun, SynthesisReport } from "@/schema";
 
+const examplePrompts = [
+  {
+    label: "State library tradeoffs",
+    prompt:
+      "Compare Zustand vs Redux Toolkit for a Tauri + React desktop app. Focus on complexity, debugging, persistence, and long-term maintainability.",
+  },
+  {
+    label: "Debug a startup issue",
+    prompt:
+      "Investigate a Tauri startup error where the app restores local history incorrectly and sometimes shows a runtime failure on launch.",
+  },
+  {
+    label: "Review an API design",
+    prompt:
+      "Review the risks in a local conversation-history API for branching, recovery, and persistence. Call out edge cases and safer defaults.",
+  },
+] as const;
+
 function formatModeLabel(mode: "mock" | "real") {
-  return mode === "real" ? "Real" : "Mock";
+  return mode === "real" ? "Live" : "Demo";
 }
 
 function formatReportStatus(status: SynthesisReport["status"]) {
@@ -120,17 +138,17 @@ function formatTokenUsage(run: ModelRun) {
 function buildModeNotice(mode: "mock" | "real") {
   if (mode === "real") {
     return {
-      title: "Live provider execution is available.",
+      title: "Live model mode is ready.",
       description:
-        "All providers required by the current preset are configured, so runs will use real model calls.",
+        "This run will call real models because all required provider keys are configured.",
       classes: "border-emerald-500/25 bg-emerald-500/10 text-emerald-950",
     };
   }
 
   return {
-    title: "Mock execution is active.",
+    title: "Demo mode is on.",
     description:
-      "At least one required provider key is missing. The workspace will fall back to deterministic mock runs until OpenAI, Anthropic, and Google are all configured.",
+      "This run will use built-in sample responses until you add keys for OpenAI, Anthropic, and Google.",
     classes: "border-amber-500/25 bg-amber-500/10 text-amber-950",
   };
 }
@@ -162,15 +180,15 @@ function EmptyWorkspaceState(props: { mode: "mock" | "real" }) {
       <div className="space-y-4">
         <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
-          Progressive Workspace
+          Start here
         </div>
         <div className="space-y-3">
           <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
-            Run a synthesis and keep the main view high-signal.
+            Ask a question and get a combined answer.
           </h3>
           <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-            The center column stays report-first: submit a prompt, get a structured synthesis
-            report, and only drill into raw model output when you need audit detail.
+            Start with one question. Alae compares several model responses, highlights agreements
+            and disagreements, and keeps each step in a saved local history.
           </p>
         </div>
       </div>
@@ -183,28 +201,28 @@ function EmptyWorkspaceState(props: { mode: "mock" | "real" }) {
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-[1.5rem] border border-border/70 bg-card/70 p-5">
           <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            01. Compose
+            01. Ask
           </div>
           <p className="mt-3 text-sm leading-6">
-            Write the next prompt in the composer and submit with the button or `Cmd/Ctrl+Enter`.
+            Type a question in the center box and submit with the button or `Cmd/Ctrl+Enter`.
           </p>
         </div>
         <div className="rounded-[1.5rem] border border-border/70 bg-card/70 p-5">
           <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            02. Review
+            02. Compare
           </div>
           <p className="mt-3 text-sm leading-6">
-            Stay on the synthesis report first: summary, consensus, conflicts, resolution, and
-            next actions.
+            Read the combined answer first, then scan agreements, disagreements, and recommended
+            next steps.
           </p>
         </div>
         <div className="rounded-[1.5rem] border border-border/70 bg-card/70 p-5">
           <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            03. Audit
+            03. Inspect
           </div>
           <p className="mt-3 text-sm leading-6">
-            Expand individual model runs only when you need raw text, token usage, latency, or
-            validation details.
+            Open model status only when you want raw output, token usage, latency, or validation
+            details.
           </p>
         </div>
       </div>
@@ -217,21 +235,20 @@ function LoadingWorkspaceState() {
     <div className="space-y-6 rounded-[2rem] border border-border/80 bg-background/65 p-6">
       <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
         <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
-        Restoring Workspace
+        Restoring your history
       </div>
 
       <div className="space-y-3">
         <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
-          Loading the most recent local conversation.
+          Loading your latest saved analysis.
         </h3>
         <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-          The workspace is hydrating the latest persisted branch head from PGLite before enabling
-          new submissions.
+          Alae is reopening your last saved step before enabling new questions.
         </p>
       </div>
 
       <div className="rounded-[1.5rem] border border-border/70 bg-card/75 px-5 py-4 text-sm leading-6 text-muted-foreground">
-        Prompt submission is temporarily disabled until the latest local state finishes loading.
+        New questions are temporarily disabled until the latest local state finishes loading.
       </div>
     </div>
   );
@@ -246,10 +263,10 @@ function WorkspaceContext(props: {
 }) {
   const submissionHint =
     props.pendingSubmissionMode === "fork"
-      ? "New submissions will fork from the selected historical node before running synthesis."
+      ? "Your next question will start a new branch from the selected saved step."
       : props.selectedNodeIsHead
-        ? "New submissions will append directly to the active branch head."
-        : "New submissions will append to the active branch.";
+        ? "Your next question will continue from the current path."
+        : "Your next question will continue from the selected path.";
 
   return (
     <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">
@@ -258,30 +275,30 @@ function WorkspaceContext(props: {
           Current context
         </span>
         <span className="inline-flex rounded-full border border-border/80 bg-card/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          {props.pendingSubmissionMode === "fork" ? "Auto Fork" : "Direct Append"}
+          {props.pendingSubmissionMode === "fork" ? "Branch next run" : "Continue current path"}
         </span>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            Conversation
+            Analysis
           </div>
           <div className="mt-2 text-sm font-medium">
-            {props.conversationTitle ?? "No conversation selected"}
+            {props.conversationTitle ?? "No saved analysis selected"}
           </div>
         </div>
         <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            Branch
+            Path
           </div>
-          <div className="mt-2 text-sm font-medium">{props.branchName ?? "No branch selected"}</div>
+          <div className="mt-2 text-sm font-medium">{props.branchName ?? "No path selected"}</div>
         </div>
         <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            Node
+            Step
           </div>
-          <div className="mt-2 text-sm font-medium">{props.nodeTitle ?? "No node selected"}</div>
+          <div className="mt-2 text-sm font-medium">{props.nodeTitle ?? "No step selected"}</div>
         </div>
       </div>
 
@@ -304,7 +321,7 @@ function HistoricalNodeState(props: { mode: "mock" | "real"; node: ConversationN
               </div>
               <div>
                 <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  Historical Node
+                  Saved step
                 </div>
                 <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
                   {props.node.title}
@@ -312,8 +329,8 @@ function HistoricalNodeState(props: { mode: "mock" | "real"; node: ConversationN
               </div>
             </div>
             <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              This node does not have a persisted synthesis report snapshot, but it still acts as a
-              restorable checkpoint for branching and follow-up runs.
+              This saved step does not have a stored combined answer, but you can still branch
+              from it and continue the analysis.
             </p>
           </div>
 
@@ -357,7 +374,7 @@ function HistoricalNodeState(props: { mode: "mock" | "real"; node: ConversationN
           </div>
         </div>
         <div className="mt-4 rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
-          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Prompt</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Question</div>
           <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
             {props.node.prompt}
           </p>
@@ -491,7 +508,7 @@ function SynthesisReportView(props: { mode: "mock" | "real"; report: SynthesisRe
               </div>
             </div>
             <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              Prompt: {props.report.prompt}
+              Question: {props.report.prompt}
             </p>
           </div>
 
@@ -696,20 +713,20 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Center Workspace
+              Ask and analyze
             </div>
             <div>
-              <CardTitle className="text-3xl tracking-[-0.04em]">Progressive Workspace</CardTitle>
+              <CardTitle className="text-3xl tracking-[-0.04em]">Ask and Analyze</CardTitle>
               <CardDescription className="mt-2 max-w-3xl">
-                Submit a prompt, inspect historical checkpoints, and keep the center column focused
-                on a single synthesis report before drilling into provider-level evidence.
+                Ask one question, read the combined answer first, and open detailed model evidence
+                only when you need it.
               </CardDescription>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={toggleTruthPanel}>
-              {isTruthPanelOpen ? "Hide Truth Panel" : "Open Truth Panel"}
+              {isTruthPanelOpen ? "Hide Model Status" : "Show Model Status"}
             </Button>
             <span
               className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getModeBadgeClasses(displayMode)}`}
@@ -734,10 +751,10 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <label htmlFor="workspace-prompt" className="text-sm font-medium">
-                  Prompt
+                  Question
                 </label>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Use `Cmd/Ctrl+Enter` to submit the current prompt.
+                  Ask what you want compared or reviewed. Use `Cmd/Ctrl+Enter` to submit.
                 </p>
               </div>
               <Button
@@ -757,11 +774,26 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
                     Running...
                   </>
                 ) : pendingSubmissionMode === "fork" ? (
-                  "Fork and run synthesis"
+                  "Branch and analyze"
                 ) : (
-                  "Run synthesis"
+                  "Analyze question"
                 )}
               </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {examplePrompts.map((example) => (
+                <Button
+                  key={example.label}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isBusy}
+                  onClick={() => setPromptDraft(example.prompt)}
+                >
+                  {example.label}
+                </Button>
+              ))}
             </div>
 
             <textarea
@@ -772,7 +804,7 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
               disabled={isBusy}
               spellCheck={false}
               rows={6}
-              placeholder="Ask Alae to compare approaches, extract consensus, and surface the important conflicts."
+              placeholder="Example: Compare Zustand vs Redux Toolkit for this desktop app and recommend which one fits better."
               className="min-h-[160px] w-full rounded-[1.5rem] border border-border/80 bg-card/85 px-4 py-4 text-sm leading-7 shadow-sm shadow-black/5 outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>

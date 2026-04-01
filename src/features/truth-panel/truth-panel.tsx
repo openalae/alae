@@ -115,7 +115,7 @@ function TruthPanelSummary() {
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot) {
-    return <EmptySection message="Run a synthesis to populate telemetry, validation, and trace diagnostics." />;
+    return <EmptySection message="Run an analysis to see model calls, errors, and validation details." />;
   }
 
   return (
@@ -174,7 +174,7 @@ function CollapsedTruthPanelSummary() {
 
   if (!truthPanelSnapshot) {
     return (
-      <EmptySection message="Run a synthesis to populate telemetry, validation, and trace diagnostics." />
+      <EmptySection message="Run an analysis to see model calls, errors, and validation details." />
     );
   }
 
@@ -200,7 +200,7 @@ function TruthPanelRunList() {
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot) {
-    return <EmptySection message="No run diagnostics are available yet." />;
+    return <EmptySection message="No model-call details are available yet." />;
   }
 
   return (
@@ -251,7 +251,7 @@ function ValidationIssueList() {
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot || truthPanelSnapshot.validationIssues.length === 0) {
-    return <EmptySection message="No validation issues were recorded for the latest snapshot." />;
+    return <EmptySection message="No validation issues were recorded for the latest result." />;
   }
 
   return (
@@ -275,7 +275,7 @@ function TraceEventList() {
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot || truthPanelSnapshot.events.length === 0) {
-    return <EmptySection message="No trace events were emitted for the latest snapshot." />;
+    return <EmptySection message="No activity was recorded for the latest result." />;
   }
 
   return (
@@ -317,7 +317,7 @@ export function TruthPanel() {
 
   const reportStatus = latestSynthesisReport?.status ?? "idle";
   const reportStatusLabel =
-    reportStatus === "idle" ? "Awaiting synthesis" : `Report ${reportStatus}`;
+    reportStatus === "idle" ? "Waiting for analysis" : `Latest result ${reportStatus}`;
 
   return (
     <Card>
@@ -326,11 +326,10 @@ export function TruthPanel() {
           <div className="space-y-2">
             <CardTitle className="flex items-center gap-3">
               <Activity className="h-5 w-5 text-primary" />
-              Truth Panel
+              Model status
             </CardTitle>
             <CardDescription>
-              Inspect runtime telemetry, validation diagnostics, and trace events for the latest
-              synthesis snapshot.
+              See which model calls ran, whether any failed, and the latest validation details.
             </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={toggleTruthPanel}>
@@ -381,7 +380,7 @@ export function TruthPanel() {
               <div className="flex items-center gap-2">
                 <Waypoints className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Run summary
+                  Overview
                 </h3>
               </div>
               <TruthPanelSummary />
@@ -391,7 +390,7 @@ export function TruthPanel() {
               <div className="flex items-center gap-2">
                 <Clock3 className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Runs
+                  Model calls
                 </h3>
               </div>
               <TruthPanelRunList />
@@ -401,7 +400,7 @@ export function TruthPanel() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Validation issues
+                  Output issues
                 </h3>
               </div>
               <ValidationIssueList />
@@ -411,7 +410,7 @@ export function TruthPanel() {
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Trace events
+                  Activity log
                 </h3>
               </div>
               <TraceEventList />
