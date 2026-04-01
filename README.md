@@ -4,8 +4,9 @@ Alae is a local-first AI reasoning workstation built with Tauri 2, Rust, React, 
 
 ## Status
 
-- Phase 1 Module 2 is complete: the scaffold is in place and the core Zod schema contracts now live under `src/schema`.
-- The next implementation module is the global state skeleton under `src/store`.
+- Phase 1 MVP is implemented locally: the current baseline includes the progressive synthesis workspace, truth panel, secure desktop API key bridge, local reasoning tree persistence, and end-to-end wiring across the desktop shell.
+- Frontend tests, Rust tests, and the production frontend build are all passing in the current repository state.
+- The next planning pass should begin with the first Phase 2 module.
 - The working PRD stays local and is intentionally not committed. The repository tracks the engineering-facing MVP breakdown in `docs/phase-1-mvp.md`.
 
 ## Stack
