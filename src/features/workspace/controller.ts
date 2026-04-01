@@ -20,13 +20,22 @@ import {
   type ApiKeyStatus,
 } from "@/store";
 import { appStore } from "@/store/app-store";
-import type { ConversationBranch, ConversationNode, LoadedConversation } from "@/schema";
+import type {
+  Conversation,
+  ConversationBranch,
+  ConversationNode,
+  ConversationSummary,
+  LoadedConversation,
+} from "@/schema";
 
 export const defaultWorkspacePresetId: SynthesisPresetId = "crossVendorDefault";
 
 type ApiKeyStatuses = Record<string, ApiKeyStatus>;
 type WorkspaceBootstrapStatus = "loading" | "ready" | "error";
+type PendingSubmissionMode = "append" | "fork";
 type WorkspaceHydrationOptions = {
+  branchId?: string | null;
+  nodeId?: string | null;
   preserveExistingResult?: boolean;
 };
 
@@ -37,23 +46,49 @@ type RunWorkspaceSynthesisOptions = {
   createMockRegistry?: (presetId: SynthesisPresetId) => MockRegistry;
 };
 
-type WorkspacePersistenceInput = {
+type PersistWorkspaceNodeInput = {
   repository: ReasoningTreeRepository;
   prompt: string;
-  currentConversationId: string | null;
-  currentBranchId: string | null;
+  conversationId: string;
+  branchId: string;
   status: "completed" | "failed";
   createdAt: string;
   synthesisReport?: WorkspaceRunResult["report"] | null;
   truthPanelSnapshot?: WorkspaceRunResult["truthPanelSnapshot"] | null;
 };
 
+type SubmissionTarget = {
+  conversationId: string;
+  branchId: string;
+};
+
 export type WorkspaceRunResult = SynthesisExecutionResult & {
   effectiveMode: SynthesisMode;
 };
 
+export type WorkspaceController = ReturnType<typeof useWorkspaceController>;
+
 function getTimestamp() {
   return new Date().toISOString();
+}
+
+function padNumber(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function formatForkBranchName(value: string) {
+  const date = new Date(value);
+
+  return [
+    "fork-",
+    date.getFullYear(),
+    padNumber(date.getMonth() + 1),
+    padNumber(date.getDate()),
+    "-",
+    padNumber(date.getHours()),
+    padNumber(date.getMinutes()),
+    padNumber(date.getSeconds()),
+  ].join("");
 }
 
 function deriveWorkspaceTitle(prompt: string) {
@@ -70,36 +105,66 @@ function deriveWorkspaceTitle(prompt: string) {
   return `${firstNonEmptyLine.slice(0, 69).trimEnd()}...`;
 }
 
-function getPreferredBranch(loadedConversation: LoadedConversation): ConversationBranch | null {
-  const mainBranch =
-    loadedConversation.branches.find((branch) => branch.name === "main") ?? null;
+function sortBranches(branches: ConversationBranch[]) {
+  return [...branches].sort((left, right) => {
+    if (left.name === "main" && right.name !== "main") {
+      return -1;
+    }
 
-  if (mainBranch) {
-    return mainBranch;
+    if (right.name === "main" && left.name !== "main") {
+      return 1;
+    }
+
+    const updatedAtOrder = right.updatedAt.localeCompare(left.updatedAt);
+
+    if (updatedAtOrder !== 0) {
+      return updatedAtOrder;
+    }
+
+    return right.id.localeCompare(left.id);
+  });
+}
+
+function getPreferredBranch(loadedConversation: LoadedConversation) {
+  return sortBranches(loadedConversation.branches)[0] ?? null;
+}
+
+function getBranchById(loadedConversation: LoadedConversation, branchId: string | null | undefined) {
+  if (!branchId) {
+    return null;
   }
 
-  return (
-    [...loadedConversation.branches].sort((left, right) => {
-      const updatedAtOrder = right.updatedAt.localeCompare(left.updatedAt);
+  return loadedConversation.branches.find((branch) => branch.id === branchId) ?? null;
+}
 
-      if (updatedAtOrder !== 0) {
-        return updatedAtOrder;
-      }
+function getNodeById(loadedConversation: LoadedConversation, nodeId: string | null | undefined) {
+  if (!nodeId) {
+    return null;
+  }
 
-      return right.id.localeCompare(left.id);
-    })[0] ?? null
-  );
+  return loadedConversation.nodes.find((node) => node.id === nodeId) ?? null;
 }
 
 function getHeadNode(
   loadedConversation: LoadedConversation,
   branch: ConversationBranch | null,
-): ConversationNode | null {
+) {
   if (!branch?.headNodeId) {
     return null;
   }
 
-  return loadedConversation.nodes.find((node) => node.id === branch.headNodeId) ?? null;
+  return getNodeById(loadedConversation, branch.headNodeId);
+}
+
+function getPendingSubmissionMode(
+  branch: ConversationBranch | null,
+  node: ConversationNode | null,
+): PendingSubmissionMode {
+  if (!branch || branch.headNodeId === null || !node) {
+    return "append";
+  }
+
+  return node.id === branch.headNodeId ? "append" : "fork";
 }
 
 function clearWorkspaceResults() {
@@ -112,10 +177,13 @@ function hydrateWorkspaceStateFromConversation(
   loadedConversation: LoadedConversation,
   options: WorkspaceHydrationOptions = {},
 ) {
-  const { preserveExistingResult = false } = options;
+  const { branchId = null, nodeId = null, preserveExistingResult = false } = options;
   const state = appStore.getState();
-  const branch = getPreferredBranch(loadedConversation);
-  const node = getHeadNode(loadedConversation, branch);
+  const branch =
+    getBranchById(loadedConversation, branchId) ?? getPreferredBranch(loadedConversation);
+  const node =
+    getNodeById(loadedConversation, nodeId) ??
+    getHeadNode(loadedConversation, branch);
 
   state.setActivePath({
     currentConversationId: loadedConversation.conversation.id,
@@ -141,58 +209,10 @@ function hydrateWorkspaceStateFromConversation(
   };
 }
 
-async function ensureConversationTarget(
-  repository: ReasoningTreeRepository,
-  prompt: string,
-  currentConversationId: string | null,
-  currentBranchId: string | null,
-  createdAt: string,
-) {
-  if (currentConversationId) {
-    const loadedConversation = await repository.loadConversation(currentConversationId);
-
-    if (loadedConversation) {
-      const branch =
-        loadedConversation.branches.find((candidate) => candidate.id === currentBranchId) ??
-        getPreferredBranch(loadedConversation);
-
-      if (branch) {
-        return {
-          conversationId: loadedConversation.conversation.id,
-          branchId: branch.id,
-        };
-      }
-    }
-  }
-
-  const createdConversation = await repository.createConversation({
-    title: deriveWorkspaceTitle(prompt),
-    createdAt,
-  });
-  const branch = getPreferredBranch(createdConversation);
-
-  if (!branch) {
-    throw new Error("The main branch could not be resolved after creating a conversation.");
-  }
-
-  return {
-    conversationId: createdConversation.conversation.id,
-    branchId: branch.id,
-  };
-}
-
-async function persistWorkspaceNode(input: WorkspacePersistenceInput) {
-  const target = await ensureConversationTarget(
-    input.repository,
-    input.prompt,
-    input.currentConversationId,
-    input.currentBranchId,
-    input.createdAt,
-  );
-
+async function persistWorkspaceNode(input: PersistWorkspaceNodeInput) {
   await input.repository.appendNode({
-    conversationId: target.conversationId,
-    branchId: target.branchId,
+    conversationId: input.conversationId,
+    branchId: input.branchId,
     title: deriveWorkspaceTitle(input.prompt),
     prompt: input.prompt,
     status: input.status,
@@ -202,10 +222,12 @@ async function persistWorkspaceNode(input: WorkspacePersistenceInput) {
     updatedAt: input.createdAt,
   });
 
-  const loadedConversation = await input.repository.loadConversation(target.conversationId);
+  const loadedConversation = await input.repository.loadConversation(input.conversationId);
 
   if (loadedConversation === null) {
-    throw new Error(`Conversation ${target.conversationId} could not be reloaded after persistence.`);
+    throw new Error(
+      `Conversation ${input.conversationId} could not be reloaded after persistence.`,
+    );
   }
 
   return loadedConversation;
@@ -275,8 +297,8 @@ export async function runWorkspaceSynthesis(
 }
 
 export function useWorkspaceController() {
-  const currentConversationId = useAppStore((state) => state.currentConversationId);
   const currentBranchId = useAppStore((state) => state.currentBranchId);
+  const currentNodeId = useAppStore((state) => state.currentNodeId);
   const apiKeyStatuses = useAppStore((state) => state.apiKeyStatuses);
   const latestSynthesisReport = useAppStore(selectLatestSynthesisReport);
   const runStatus = useAppStore((state) => state.runStatus);
@@ -288,6 +310,8 @@ export function useWorkspaceController() {
   }
 
   const repository = repositoryRef.current;
+  const [loadedConversation, setLoadedConversation] = useState<LoadedConversation | null>(null);
+  const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([]);
   const [promptDraft, setPromptDraft] = useState("");
   const [inputErrorMessage, setInputErrorMessage] = useState<string | null>(null);
   const [bootstrapErrorMessage, setBootstrapErrorMessage] = useState<string | null>(null);
@@ -298,22 +322,175 @@ export function useWorkspaceController() {
   const isRunning = runStatus === "running";
   const isBootstrapping = bootstrapStatus === "loading";
   const isBusy = isRunning || isBootstrapping;
+  const selectedConversation: Conversation | null = loadedConversation?.conversation ?? null;
+  const selectedBranch =
+    loadedConversation === null ? null : getBranchById(loadedConversation, currentBranchId);
+  const selectedNode =
+    loadedConversation === null ? null : getNodeById(loadedConversation, currentNodeId);
+  const selectedNodeIsHead =
+    selectedBranch !== null &&
+    selectedNode !== null &&
+    selectedBranch.headNodeId === selectedNode.id;
+  const pendingSubmissionMode = getPendingSubmissionMode(selectedBranch, selectedNode);
+
+  const refreshExplorer = async () => {
+    const summaries = await repository.listConversations();
+    setConversationSummaries(summaries);
+  };
+
+  const reloadConversation = async (
+    conversationId: string,
+    options: WorkspaceHydrationOptions = {},
+  ) => {
+    const nextConversation = await repository.loadConversation(conversationId);
+
+    if (nextConversation === null) {
+      throw new Error(`Conversation ${conversationId} could not be loaded.`);
+    }
+
+    setLoadedConversation(nextConversation);
+    const selection = hydrateWorkspaceStateFromConversation(nextConversation, options);
+    appStore.getState().resetRuntime();
+
+    return {
+      conversation: nextConversation,
+      ...selection,
+    };
+  };
+
+  const ensureSubmissionTarget = async (
+    prompt: string,
+    timestamp: string,
+  ): Promise<SubmissionTarget> => {
+    let conversation = loadedConversation;
+
+    if (conversation === null) {
+      conversation = await repository.createConversation({
+        title: deriveWorkspaceTitle(prompt),
+        createdAt: timestamp,
+      });
+    }
+
+    const conversationId = conversation.conversation.id;
+    const branch = getBranchById(conversation, currentBranchId) ?? getPreferredBranch(conversation);
+
+    if (!branch) {
+      throw new Error("The selected conversation does not have a branch available for submission.");
+    }
+
+    if (branch.headNodeId === null || currentNodeId === null || currentNodeId === branch.headNodeId) {
+      return {
+        conversationId,
+        branchId: branch.id,
+      };
+    }
+
+    const forkBranch = await repository.forkNode({
+      conversationId,
+      sourceNodeId: currentNodeId,
+      name: formatForkBranchName(timestamp),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    return {
+      conversationId,
+      branchId: forkBranch.id,
+    };
+  };
+
+  const selectConversation = async (conversationId: string) => {
+    try {
+      setBootstrapErrorMessage(null);
+      setLastExecutionMode(null);
+      await reloadConversation(conversationId);
+    } catch (error) {
+      setBootstrapErrorMessage(`Unable to load conversation. ${getErrorMessage(error)}`);
+    }
+  };
+
+  const selectBranch = async (branchId: string) => {
+    if (!loadedConversation) {
+      return;
+    }
+
+    setBootstrapErrorMessage(null);
+    setLastExecutionMode(null);
+    hydrateWorkspaceStateFromConversation(loadedConversation, { branchId });
+    appStore.getState().resetRuntime();
+  };
+
+  const selectNode = async (nodeId: string) => {
+    if (!loadedConversation) {
+      return;
+    }
+
+    const node = getNodeById(loadedConversation, nodeId);
+
+    if (!node) {
+      return;
+    }
+
+    setBootstrapErrorMessage(null);
+    setLastExecutionMode(null);
+    hydrateWorkspaceStateFromConversation(loadedConversation, {
+      branchId: node.branchId,
+      nodeId,
+    });
+    appStore.getState().resetRuntime();
+  };
+
+  const forkSelectedNode = async () => {
+    if (!loadedConversation || !selectedNode) {
+      return;
+    }
+
+    const timestamp = getTimestamp();
+
+    try {
+      setBootstrapErrorMessage(null);
+      setLastExecutionMode(null);
+
+      const forkBranch = await repository.forkNode({
+        conversationId: loadedConversation.conversation.id,
+        sourceNodeId: selectedNode.id,
+        name: formatForkBranchName(timestamp),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+
+      await reloadConversation(loadedConversation.conversation.id, {
+        branchId: forkBranch.id,
+        nodeId: forkBranch.headNodeId,
+      });
+      await refreshExplorer();
+    } catch (error) {
+      setBootstrapErrorMessage(`Unable to fork from the selected node. ${getErrorMessage(error)}`);
+    }
+  };
 
   useEffect(() => {
     let active = true;
 
     void (async () => {
       try {
-        const loadedConversation = await repository.loadLatestConversation();
+        const [summaries, latestConversation] = await Promise.all([
+          repository.listConversations(),
+          repository.loadLatestConversation(),
+        ]);
 
         if (!active) {
           return;
         }
 
-        if (loadedConversation === null) {
+        setConversationSummaries(summaries);
+
+        if (latestConversation === null) {
+          setLoadedConversation(null);
           clearWorkspaceResults();
         } else {
-          hydrateWorkspaceStateFromConversation(loadedConversation);
+          setLoadedConversation(latestConversation);
+          hydrateWorkspaceStateFromConversation(latestConversation);
         }
 
         appStore.getState().resetRuntime();
@@ -325,6 +502,7 @@ export function useWorkspaceController() {
           return;
         }
 
+        setLoadedConversation(null);
         appStore.getState().resetRuntime();
         setBootstrapErrorMessage(
           `Unable to restore the latest local conversation. ${getErrorMessage(error)}`,
@@ -335,6 +513,7 @@ export function useWorkspaceController() {
 
     return () => {
       active = false;
+      void repository.close().catch(() => undefined);
     };
   }, [repository]);
 
@@ -350,56 +529,65 @@ export function useWorkspaceController() {
       return;
     }
 
+    const state = appStore.getState();
+    const submissionTimestamp = getTimestamp();
+    let target: SubmissionTarget | null = null;
+
     setInputErrorMessage(null);
     setBootstrapErrorMessage(null);
-    appStore.getState().beginRun();
+    state.beginRun();
 
     try {
+      target = await ensureSubmissionTarget(trimmedPrompt, submissionTimestamp);
+
       const result = await runWorkspaceSynthesis(trimmedPrompt, {
         apiKeyStatuses,
       });
 
-      try {
-        const persistedConversation = await persistWorkspaceNode({
-          repository,
-          prompt: trimmedPrompt,
-          currentConversationId,
-          currentBranchId,
-          status: "completed",
-          synthesisReport: result.report,
-          truthPanelSnapshot: result.truthPanelSnapshot,
-          createdAt: result.report.createdAt,
-        });
+      const persistedConversation = await persistWorkspaceNode({
+        repository,
+        prompt: trimmedPrompt,
+        conversationId: target.conversationId,
+        branchId: target.branchId,
+        status: "completed",
+        synthesisReport: result.report,
+        truthPanelSnapshot: result.truthPanelSnapshot,
+        createdAt: result.report.createdAt,
+      });
 
-        hydrateWorkspaceStateFromConversation(persistedConversation);
-        appStore.getState().completeRun(result.report);
-        setLastExecutionMode(result.effectiveMode);
-      } catch (persistenceError) {
-        appStore
-          .getState()
-          .failRun(`Local persistence failed: ${getErrorMessage(persistenceError)}`);
-      }
+      setLoadedConversation(persistedConversation);
+      hydrateWorkspaceStateFromConversation(persistedConversation, {
+        branchId: target.branchId,
+      });
+      state.completeRun(result.report);
+      setLastExecutionMode(result.effectiveMode);
+      await refreshExplorer();
     } catch (error) {
       let failureMessage = getErrorMessage(error);
 
-      try {
-        const failedConversation = await persistWorkspaceNode({
-          repository,
-          prompt: trimmedPrompt,
-          currentConversationId,
-          currentBranchId,
-          status: "failed",
-          createdAt: getTimestamp(),
-        });
+      if (target !== null) {
+        try {
+          const failedConversation = await persistWorkspaceNode({
+            repository,
+            prompt: trimmedPrompt,
+            conversationId: target.conversationId,
+            branchId: target.branchId,
+            status: "failed",
+            createdAt: getTimestamp(),
+          });
 
-        hydrateWorkspaceStateFromConversation(failedConversation, {
-          preserveExistingResult: true,
-        });
-      } catch (persistenceError) {
-        failureMessage = `${failureMessage} Local persistence also failed: ${getErrorMessage(persistenceError)}`;
+          setLoadedConversation(failedConversation);
+          hydrateWorkspaceStateFromConversation(failedConversation, {
+            branchId: target.branchId,
+            preserveExistingResult: true,
+          });
+          await refreshExplorer();
+        } catch (persistenceError) {
+          failureMessage = `${failureMessage} Local persistence also failed: ${getErrorMessage(persistenceError)}`;
+        }
       }
 
-      appStore.getState().failRun(failureMessage);
+      state.failRun(failureMessage);
     }
   };
 
@@ -425,6 +613,20 @@ export function useWorkspaceController() {
     isBusy,
     effectiveMode,
     displayMode,
+    conversationSummaries,
+    loadedConversation,
+    selectedConversation,
+    selectedBranch,
+    selectedNode,
+    selectedBranchId: currentBranchId,
+    selectedNodeId: currentNodeId,
+    selectedNodeIsHead,
+    pendingSubmissionMode,
     submitPrompt,
+    selectConversation,
+    selectBranch,
+    selectNode,
+    forkSelectedNode,
+    refreshExplorer,
   };
 }

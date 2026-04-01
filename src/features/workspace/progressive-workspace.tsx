@@ -4,6 +4,7 @@ import {
   Bot,
   BrainCircuit,
   ChevronDown,
+  History,
   LoaderCircle,
   Sparkles,
   Waypoints,
@@ -18,8 +19,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toggleTruthPanel, useTruthPanelState } from "@/features/truth-panel";
-import { useWorkspaceController } from "@/features/workspace/controller";
-import type { ModelRun, SynthesisReport } from "@/schema";
+import {
+  useWorkspaceController,
+  type WorkspaceController,
+} from "@/features/workspace/controller";
+import type { ConversationNode, ModelRun, SynthesisReport } from "@/schema";
 
 function formatModeLabel(mode: "mock" | "real") {
   return mode === "real" ? "Real" : "Mock";
@@ -53,6 +57,22 @@ function formatRunStatus(status: ModelRun["status"]) {
   return "Failed";
 }
 
+function formatNodeStatus(status: ConversationNode["status"]) {
+  if (status === "completed") {
+    return "Completed";
+  }
+
+  if (status === "running") {
+    return "Running";
+  }
+
+  if (status === "failed") {
+    return "Failed";
+  }
+
+  return "Idle";
+}
+
 function getModeBadgeClasses(mode: "mock" | "real") {
   return mode === "real"
     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900"
@@ -71,7 +91,7 @@ function getReportStatusClasses(status: SynthesisReport["status"]) {
   return "border-rose-500/30 bg-rose-500/10 text-rose-900";
 }
 
-function getRunStatusClasses(status: ModelRun["status"]) {
+function getRunStatusClasses(status: ModelRun["status"] | ConversationNode["status"]) {
   if (status === "completed") {
     return "border-emerald-500/30 bg-emerald-500/10 text-emerald-900";
   }
@@ -80,7 +100,7 @@ function getRunStatusClasses(status: ModelRun["status"]) {
     return "border-sky-500/30 bg-sky-500/10 text-sky-900";
   }
 
-  if (status === "pending") {
+  if (status === "pending" || status === "idle") {
     return "border-border/80 bg-background/80 text-muted-foreground";
   }
 
@@ -149,9 +169,8 @@ function EmptyWorkspaceState(props: { mode: "mock" | "real" }) {
             Run a synthesis and keep the main view high-signal.
           </h3>
           <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-            The center column now acts as the Phase 1 workspace: submit a prompt, receive a
-            structured synthesis report, then drill into individual model runs only when you
-            need source-level detail.
+            The center column stays report-first: submit a prompt, get a structured synthesis
+            report, and only drill into raw model output when you need audit detail.
           </p>
         </div>
       </div>
@@ -167,8 +186,7 @@ function EmptyWorkspaceState(props: { mode: "mock" | "real" }) {
             01. Compose
           </div>
           <p className="mt-3 text-sm leading-6">
-            Write the next prompt in the composer and submit with the button or
-            `Cmd/Ctrl+Enter`.
+            Write the next prompt in the composer and submit with the button or `Cmd/Ctrl+Enter`.
           </p>
         </div>
         <div className="rounded-[1.5rem] border border-border/70 bg-card/70 p-5">
@@ -219,6 +237,136 @@ function LoadingWorkspaceState() {
   );
 }
 
+function WorkspaceContext(props: {
+  conversationTitle: string | null;
+  branchName: string | null;
+  nodeTitle: string | null;
+  pendingSubmissionMode: "append" | "fork";
+  selectedNodeIsHead: boolean;
+}) {
+  const submissionHint =
+    props.pendingSubmissionMode === "fork"
+      ? "New submissions will fork from the selected historical node before running synthesis."
+      : props.selectedNodeIsHead
+        ? "New submissions will append directly to the active branch head."
+        : "New submissions will append to the active branch.";
+
+  return (
+    <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex rounded-full border border-border/80 bg-card/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Current context
+        </span>
+        <span className="inline-flex rounded-full border border-border/80 bg-card/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          {props.pendingSubmissionMode === "fork" ? "Auto Fork" : "Direct Append"}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Conversation
+          </div>
+          <div className="mt-2 text-sm font-medium">
+            {props.conversationTitle ?? "No conversation selected"}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Branch
+          </div>
+          <div className="mt-2 text-sm font-medium">{props.branchName ?? "No branch selected"}</div>
+        </div>
+        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Node
+          </div>
+          <div className="mt-2 text-sm font-medium">{props.nodeTitle ?? "No node selected"}</div>
+        </div>
+      </div>
+
+      <p className="mt-4 text-sm leading-6 text-muted-foreground">{submissionHint}</p>
+    </section>
+  );
+}
+
+function HistoricalNodeState(props: { mode: "mock" | "real"; node: ConversationNode }) {
+  const modeNotice = buildModeNotice(props.mode);
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-[2rem] border border-border/70 bg-card/80 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <History className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                  Historical Node
+                </div>
+                <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
+                  {props.node.title}
+                </h3>
+              </div>
+            </div>
+            <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+              This node does not have a persisted synthesis report snapshot, but it still acts as a
+              restorable checkpoint for branching and follow-up runs.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getModeBadgeClasses(props.mode)}`}
+            >
+              {formatModeLabel(props.mode)}
+            </span>
+            <span
+              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getRunStatusClasses(props.node.status)}`}
+            >
+              {formatNodeStatus(props.node.status)}
+            </span>
+          </div>
+        </div>
+
+        <div className={`mt-6 rounded-[1.5rem] border px-5 py-4 ${modeNotice.classes}`}>
+          <div className="text-sm font-semibold">{modeNotice.title}</div>
+          <p className="mt-2 text-sm leading-6">{modeNotice.description}</p>
+        </div>
+      </section>
+
+      <section className="rounded-[1.75rem] border border-border/70 bg-card/75 p-5">
+        <div className="flex items-center gap-3">
+          <Waypoints className="h-5 w-5 text-primary" />
+          <h4 className="text-lg font-semibold">Checkpoint details</h4>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              Status
+            </div>
+            <div className="mt-2 text-sm font-medium">{formatNodeStatus(props.node.status)}</div>
+          </div>
+          <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              Created
+            </div>
+            <div className="mt-2 text-sm font-medium">{props.node.createdAt}</div>
+          </div>
+        </div>
+        <div className="mt-4 rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Prompt</div>
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+            {props.node.prompt}
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ModelRunsAccordion(props: { runs: ModelRun[] }) {
   const [openRunId, setOpenRunId] = useState<string | null>(props.runs[0]?.id ?? null);
 
@@ -228,7 +376,10 @@ function ModelRunsAccordion(props: { runs: ModelRun[] }) {
         const isOpen = openRunId === run.id;
 
         return (
-          <section key={run.id} className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/75">
+          <section
+            key={run.id}
+            className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/75"
+          >
             <button
               type="button"
               className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
@@ -505,7 +656,12 @@ function SynthesisReportView(props: { mode: "mock" | "real"; report: SynthesisRe
   );
 }
 
-export function ProgressiveWorkspace() {
+type ProgressiveWorkspaceProps = {
+  controller?: WorkspaceController;
+};
+
+export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
+  const controller = props.controller ?? useWorkspaceController();
   const {
     promptDraft,
     setPromptDraft,
@@ -517,8 +673,13 @@ export function ProgressiveWorkspace() {
     isRunning,
     isBusy,
     displayMode,
+    selectedConversation,
+    selectedBranch,
+    selectedNode,
+    selectedNodeIsHead,
+    pendingSubmissionMode,
     submitPrompt,
-  } = useWorkspaceController();
+  } = controller;
   const { isTruthPanelOpen } = useTruthPanelState();
 
   const handlePromptKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -540,8 +701,8 @@ export function ProgressiveWorkspace() {
             <div>
               <CardTitle className="text-3xl tracking-[-0.04em]">Progressive Workspace</CardTitle>
               <CardDescription className="mt-2 max-w-3xl">
-                Submit a prompt, run synthesis, and keep the center column focused on a single
-                report before drilling into provider-level evidence.
+                Submit a prompt, inspect historical checkpoints, and keep the center column focused
+                on a single synthesis report before drilling into provider-level evidence.
               </CardDescription>
             </div>
           </div>
@@ -560,6 +721,14 @@ export function ProgressiveWorkspace() {
       </CardHeader>
 
       <CardContent className="space-y-6 pt-6">
+        <WorkspaceContext
+          conversationTitle={selectedConversation?.title ?? null}
+          branchName={selectedBranch?.name ?? null}
+          nodeTitle={selectedNode?.title ?? null}
+          pendingSubmissionMode={pendingSubmissionMode}
+          selectedNodeIsHead={selectedNodeIsHead}
+        />
+
         <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-4">
@@ -575,7 +744,7 @@ export function ProgressiveWorkspace() {
                 type="button"
                 disabled={isBusy}
                 onClick={() => void submitPrompt()}
-                className="min-w-[160px]"
+                className="min-w-[190px]"
               >
                 {isBootstrapping ? (
                   <>
@@ -587,6 +756,8 @@ export function ProgressiveWorkspace() {
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     Running...
                   </>
+                ) : pendingSubmissionMode === "fork" ? (
+                  "Fork and run synthesis"
                 ) : (
                   "Run synthesis"
                 )}
@@ -629,6 +800,8 @@ export function ProgressiveWorkspace() {
           <LoadingWorkspaceState />
         ) : latestSynthesisReport ? (
           <SynthesisReportView mode={displayMode} report={latestSynthesisReport} />
+        ) : selectedNode ? (
+          <HistoricalNodeState mode={displayMode} node={selectedNode} />
         ) : (
           <EmptyWorkspaceState mode={displayMode} />
         )}

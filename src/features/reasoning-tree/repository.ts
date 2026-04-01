@@ -5,6 +5,7 @@ import {
   ConversationBranchSchema,
   ConversationNodeSchema,
   ConversationSchema,
+  ConversationSummarySchema,
   LoadedConversationSchema,
   ModelRunSchema,
   NodeStatusSchema,
@@ -16,6 +17,7 @@ import {
   type LoadedConversation,
   type ModelRun,
   type NodeStatus,
+  type ConversationSummary,
   type SynthesisReport,
 } from "@/schema";
 import { EntityIdSchema, IsoDatetimeSchema, NonEmptyStringSchema } from "@/schema";
@@ -69,6 +71,15 @@ type ConversationRow = {
   title: string;
   createdAt: string | Date;
   updatedAt: string | Date;
+};
+
+type ConversationSummaryRow = {
+  id: string;
+  title: string;
+  updatedAt: string | Date;
+  branchCount: number;
+  nodeCount: number;
+  latestNodeStatus: NodeStatus | null;
 };
 
 type BranchRow = {
@@ -125,6 +136,7 @@ export type ReasoningTreeRepository = {
   createConversation: (input?: CreateConversationInput) => Promise<LoadedConversation>;
   appendNode: (input: AppendNodeInput) => Promise<ConversationNode>;
   forkNode: (input: ForkNodeInput) => Promise<ConversationBranch>;
+  listConversations: () => Promise<ConversationSummary[]>;
   loadConversation: (id: string) => Promise<LoadedConversation | null>;
   loadLatestConversation: () => Promise<LoadedConversation | null>;
   close: () => Promise<void>;
@@ -159,6 +171,17 @@ function mapConversationRow(row: ConversationRow): Conversation {
     ...row,
     createdAt: normalizeIsoDatetime(row.createdAt),
     updatedAt: normalizeIsoDatetime(row.updatedAt),
+  });
+}
+
+function mapConversationSummaryRow(row: ConversationSummaryRow): ConversationSummary {
+  return ConversationSummarySchema.parse({
+    id: row.id,
+    title: row.title,
+    updatedAt: normalizeIsoDatetime(row.updatedAt),
+    branchCount: row.branchCount,
+    nodeCount: row.nodeCount,
+    latestNodeStatus: row.latestNodeStatus,
   });
 }
 
@@ -588,6 +611,42 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
 
       return branch;
     });
+  }
+
+  async listConversations(): Promise<ConversationSummary[]> {
+    const db = await this.dbPromise;
+    const result = await db.query<ConversationSummaryRow>(
+      `
+        SELECT
+          c.id,
+          c.title,
+          c.updated_at::text AS "updatedAt",
+          branch_counts.branch_count AS "branchCount",
+          node_counts.node_count AS "nodeCount",
+          latest_nodes.status AS "latestNodeStatus"
+        FROM conversations AS c
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS branch_count
+          FROM conversation_branches AS cb
+          WHERE cb.conversation_id = c.id
+        ) AS branch_counts ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS node_count
+          FROM conversation_nodes AS cn
+          WHERE cn.conversation_id = c.id
+        ) AS node_counts ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT cn.status
+          FROM conversation_nodes AS cn
+          WHERE cn.conversation_id = c.id
+          ORDER BY cn.created_at DESC, cn.id DESC
+          LIMIT 1
+        ) AS latest_nodes ON TRUE
+        ORDER BY c.updated_at DESC, c.id DESC
+      `,
+    );
+
+    return result.rows.map(mapConversationSummaryRow);
   }
 
   async loadConversation(id: string): Promise<LoadedConversation | null> {

@@ -128,6 +128,71 @@ afterEach(async () => {
 });
 
 describe("reasoning tree repository", () => {
+  it("lists conversation summaries with counts, latest status, and recency order", async () => {
+    const { repository } = await createRepository();
+
+    const olderConversation = await repository.createConversation({
+      id: "conversation-summary-1",
+      title: "Older conversation",
+      createdAt,
+    });
+    await repository.appendNode({
+      conversationId: olderConversation.conversation.id,
+      branchId: olderConversation.branches[0].id,
+      id: "node-summary-1",
+      title: "Older conversation node",
+      prompt: "Add a completed node.",
+      synthesisReport: reportFixture,
+      truthPanelSnapshot: truthPanelSnapshotFixture,
+      createdAt: completedAt,
+    });
+
+    const middleConversation = await repository.createConversation({
+      id: "conversation-summary-2",
+      title: "Middle conversation",
+      createdAt,
+    });
+
+    const newestConversation = await repository.createConversation({
+      id: "conversation-summary-3",
+      title: "Newest conversation",
+      createdAt: "2026-03-17T11:04:00Z",
+    });
+
+    const summaries = await repository.listConversations();
+
+    expect(summaries).toHaveLength(3);
+    expect(summaries.map((summary) => summary.id)).toEqual([
+      newestConversation.conversation.id,
+      middleConversation.conversation.id,
+      olderConversation.conversation.id,
+    ]);
+    expect(summaries[0]).toEqual({
+      id: newestConversation.conversation.id,
+      title: "Newest conversation",
+      updatedAt: "2026-03-17T11:04:00.000Z",
+      branchCount: 1,
+      nodeCount: 0,
+      latestNodeStatus: null,
+    });
+    expect(summaries[1]).toEqual({
+      id: middleConversation.conversation.id,
+      title: "Middle conversation",
+      updatedAt: "2026-03-17T11:02:00.000Z",
+      branchCount: 1,
+      nodeCount: 0,
+      latestNodeStatus: null,
+    });
+    expect(summaries[2]).toEqual({
+      id: olderConversation.conversation.id,
+      title: "Older conversation",
+      updatedAt: "2026-03-17T11:01:00.000Z",
+      branchCount: 1,
+      nodeCount: 1,
+      latestNodeStatus: "completed",
+    });
+  });
+
   it("creates a conversation with an empty main branch", async () => {
     const { repository } = await createRepository();
 

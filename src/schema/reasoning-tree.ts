@@ -4,6 +4,7 @@ import {
   EntityIdSchema,
   IsoDatetimeSchema,
   NodeStatusSchema,
+  NonNegativeIntegerSchema,
   NonEmptyStringSchema,
 } from "@/schema/common";
 import { ModelRunSchema, SynthesisReportSchema } from "@/schema/consensus";
@@ -15,6 +16,17 @@ export const ConversationSchema = z
     title: NonEmptyStringSchema,
     createdAt: IsoDatetimeSchema,
     updatedAt: IsoDatetimeSchema,
+  })
+  .strict();
+
+export const ConversationSummarySchema = z
+  .object({
+    id: EntityIdSchema,
+    title: NonEmptyStringSchema,
+    updatedAt: IsoDatetimeSchema,
+    branchCount: NonNegativeIntegerSchema,
+    nodeCount: NonNegativeIntegerSchema,
+    latestNodeStatus: NodeStatusSchema.nullable(),
   })
   .strict();
 
@@ -139,6 +151,7 @@ export const LoadedConversationSchema = z
   });
 
 export type Conversation = z.infer<typeof ConversationSchema>;
+export type ConversationSummary = z.infer<typeof ConversationSummarySchema>;
 export type ConversationNode = z.infer<typeof ConversationNodeSchema>;
 export type ConversationBranch = z.infer<typeof ConversationBranchSchema>;
 export type LoadedConversation = z.infer<typeof LoadedConversationSchema>;

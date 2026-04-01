@@ -16,6 +16,7 @@ const {
     createConversation: vi.fn(),
     appendNode: vi.fn(),
     forkNode: vi.fn(),
+    listConversations: vi.fn(),
     loadConversation: vi.fn(),
     loadLatestConversation: vi.fn(),
     close: vi.fn(),
@@ -171,22 +172,27 @@ describe("App", () => {
     repositoryMock.createConversation.mockReset();
     repositoryMock.appendNode.mockReset();
     repositoryMock.forkNode.mockReset();
+    repositoryMock.listConversations.mockReset();
     repositoryMock.loadConversation.mockReset();
     repositoryMock.loadLatestConversation.mockReset();
     repositoryMock.close.mockReset();
 
     refreshApiKeyStatusesMock.mockResolvedValue(undefined);
     repositoryMock.close.mockResolvedValue(undefined);
+    repositoryMock.listConversations.mockResolvedValue([]);
     repositoryMock.loadLatestConversation.mockResolvedValue(null);
   });
 
-  it("renders the module 9 shell and refreshes provider status on mount", async () => {
+  it("renders the module 10 shell and refreshes provider status on mount", async () => {
     render(<App />);
 
     expect(
       screen.getByRole("heading", {
-        name: /Alae now closes the full Phase 1 loop with local conversation recovery/i,
+        name: /Alae now exposes the reasoning tree as a real AI Git Explorer/i,
       }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "AI Git Explorer" }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { level: 2, name: "Progressive Workspace" }),
@@ -202,6 +208,16 @@ describe("App", () => {
 
   it("shares truth-panel toggle state between the workspace header and the right rail", async () => {
     repositoryMock.loadLatestConversation.mockResolvedValue(createRestoredConversation());
+    repositoryMock.listConversations.mockResolvedValue([
+      {
+        id: "conversation-app-1",
+        title: "Inspect the latest telemetry.",
+        updatedAt: report.createdAt,
+        branchCount: 1,
+        nodeCount: 1,
+        latestNodeStatus: "completed",
+      },
+    ]);
 
     render(<App />);
 

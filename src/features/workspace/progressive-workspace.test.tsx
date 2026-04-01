@@ -10,6 +10,7 @@ const { runSynthesisMock, createReasoningTreeRepositoryMock, repositoryMock } = 
     createConversation: vi.fn(),
     appendNode: vi.fn(),
     forkNode: vi.fn(),
+    listConversations: vi.fn(),
     loadConversation: vi.fn(),
     loadLatestConversation: vi.fn(),
     close: vi.fn(),
@@ -301,10 +302,12 @@ describe("ProgressiveWorkspace", () => {
     repositoryMock.createConversation.mockReset();
     repositoryMock.appendNode.mockReset();
     repositoryMock.forkNode.mockReset();
+    repositoryMock.listConversations.mockReset();
     repositoryMock.loadConversation.mockReset();
     repositoryMock.loadLatestConversation.mockReset();
     repositoryMock.close.mockReset();
     repositoryMock.close.mockResolvedValue(undefined);
+    repositoryMock.listConversations.mockResolvedValue([]);
     repositoryMock.loadLatestConversation.mockResolvedValue(null);
 
     appStore.setState(
@@ -383,7 +386,9 @@ describe("ProgressiveWorkspace", () => {
     fireEvent.change(promptField, { target: { value: "Build module 9." } });
     fireEvent.keyDown(promptField, { key: "Enter", metaKey: true });
 
-    expect(runSynthesisMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(runSynthesisMock).toHaveBeenCalledTimes(1);
+    });
     expect(screen.getByRole("button", { name: /Running/i })).toBeDisabled();
 
     runDeferred.resolve({
@@ -399,7 +404,6 @@ describe("ProgressiveWorkspace", () => {
     ).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(repositoryMock.createConversation).toHaveBeenCalledTimes(1);
       expect(repositoryMock.appendNode).toHaveBeenCalledWith(
         expect.objectContaining({
           conversationId: "conversation-module-9",
@@ -428,9 +432,7 @@ describe("ProgressiveWorkspace", () => {
     });
 
     repositoryMock.loadLatestConversation.mockResolvedValue(restoredConversation);
-    repositoryMock.loadConversation
-      .mockResolvedValueOnce(restoredConversation)
-      .mockResolvedValueOnce(failedConversation);
+    repositoryMock.loadConversation.mockResolvedValue(failedConversation);
     repositoryMock.appendNode.mockResolvedValue(failedConversation.nodes[0]);
     runSynthesisMock.mockRejectedValue(new Error("transport down"));
 
