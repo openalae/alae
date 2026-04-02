@@ -10,7 +10,6 @@ import {
   Waypoints,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   toggleTruthPanel,
   useTruthPanelAutoOpen,
@@ -225,7 +224,19 @@ export function TruthPanel() {
   return (
     <div className="rounded-xl border border-border/60 bg-card">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 p-4 border-b border-border/30">
+      <div 
+        role="button"
+        tabIndex={0}
+        onClick={toggleTruthPanel}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            toggleTruthPanel();
+            e.preventDefault();
+          }
+        }}
+        className="group flex cursor-pointer items-start justify-between gap-3 rounded-t-xl border-b border-border/30 p-4 transition-colors hover:bg-accent/30"
+        title={isTruthPanelOpen ? t("Hide details") as string : t("Show details") as string}
+      >
         <div className="space-y-1">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <Activity className="h-4 w-4 text-primary" />
@@ -235,19 +246,13 @@ export function TruthPanel() {
             {t("See which model calls ran, whether any failed, and the latest validation details.")}
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={toggleTruthPanel}>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover:bg-accent group-hover:text-foreground">
           {isTruthPanelOpen ? (
-            <>
-              <ChevronUp className="h-3.5 w-3.5" />
-              <span className="text-xs">{t("Hide details")}</span>
-            </>
+            <ChevronUp className="h-4 w-4" />
           ) : (
-            <>
-              <ChevronDown className="h-3.5 w-3.5" />
-              <span className="text-xs">{t("Show details")}</span>
-            </>
+            <ChevronDown className="h-4 w-4" />
           )}
-        </Button>
+        </div>
       </div>
 
       {/* Content */}

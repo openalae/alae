@@ -318,7 +318,7 @@ export function AppShell() {
 
         {/* Right Inspector Panel */}
         <aside
-          className={`flex shrink-0 flex-col overflow-hidden border-l border-border/30 bg-surface-container-low transition-all duration-300 ease-in-out ${
+          className={`flex shrink-0 flex-col overflow-hidden border-l border-border/30 bg-surface-container-low transition-[width] duration-300 ease-in-out ${
             isRightPanelOpen ? "w-80" : "w-0"
           }`}
         >

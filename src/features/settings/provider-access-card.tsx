@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { KeyRound, LoaderCircle, ShieldCheck, Trash2 } from "lucide-react";
+import { KeyRound, LoaderCircle, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,8 +111,15 @@ export function ProviderAccessCard({
           </p>
         </div>
         {onRefresh ? (
-          <Button variant="ghost" size="sm" disabled={isRefreshing} onClick={onRefresh}>
-            {isRefreshing ? t("Refreshing...") : t("Refresh access")}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-md"
+            disabled={isRefreshing}
+            onClick={onRefresh}
+            title={isRefreshing ? t("Refreshing...") as string : t("Refresh access") as string}
+          >
+            <RotateCcw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
           </Button>
         ) : null}
       </div>

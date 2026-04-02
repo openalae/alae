@@ -217,12 +217,12 @@
 @keyframes breathing-red {
   0%,
   100% {
-    box-shadow: 0 0 5px rgba(255, 85, 69, 0.2);
-    background-color: rgba(255, 85, 69, 0.05);
+    box-shadow: 0 0 5px color-mix(in srgb, var(--color-error) 30%, transparent);
+    background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
   }
   50% {
-    box-shadow: 0 0 15px rgba(255, 85, 69, 0.4);
-    background-color: rgba(255, 85, 69, 0.1);
+    box-shadow: 0 0 15px color-mix(in srgb, var(--color-error) 50%, transparent);
+    background-color: color-mix(in srgb, var(--color-error) 30%, transparent);
   }
 }
 
