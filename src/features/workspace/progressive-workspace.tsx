@@ -8,18 +8,17 @@ import {
   LoaderCircle,
   Sparkles,
   Waypoints,
+  GitFork,
+  Play
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { synthesisPresetDefinitions } from "@/features/consensus";
-import { toggleTruthPanel, useTruthPanelState } from "@/features/truth-panel";
+// Removed unused truth panel import
 import {
   getProviderAccessSectionId,
   getProviderDefinition,
@@ -571,98 +570,47 @@ function ModelRunsAccordion(props: { runs: ModelRun[] }) {
   const [openRunId, setOpenRunId] = useState<string | null>(props.runs[0]?.id ?? null);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1">
       {props.runs.map((run) => {
         const isOpen = openRunId === run.id;
+        const colorClass = run.status === "completed" ? "text-primary" : run.status === "failed" ? "text-rose-500" : "text-muted-foreground";
 
         return (
-          <section
+          <div
             key={run.id}
-            className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/75"
+            className={`rounded-sm transition-colors border border-border/20 ${isOpen ? 'bg-surface-container-high' : 'bg-surface-container-low hover:bg-surface-container-high cursor-pointer'}`}
           >
-            <button
-              type="button"
-              className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
-              aria-expanded={isOpen}
-              onClick={() => setOpenRunId((current) => (current === run.id ? null : run.id))}
-            >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold capitalize">{run.role}</span>
-                  <span className="text-sm text-muted-foreground">
+            <div className={`p-4 flex items-center justify-between ${isOpen ? 'border-b border-border/20' : ''}`} onClick={() => setOpenRunId(openRunId === run.id ? null : run.id)}>
+              <div className="flex w-full min-w-0 items-center gap-4">
+                <div className={`text-xl font-bold flex items-center justify-center w-8 h-8 rounded shrink-0 ${colorClass} bg-background`}>
+                    {run.role.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className={`text-sm font-bold truncate ${isOpen ? 'text-primary' : 'text-foreground'}`}>
                     {run.provider} / {run.model}
-                  </span>
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase truncate mt-1">
+                    {formatRunStatus(run.status)} • {formatTokenUsage(run)} • {run.latencyMs ?? 0}ms
+                  </div>
                 </div>
-                <div className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  {formatTokenUsage(run)}
-                </div>
+                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-300 ${isOpen ? 'text-primary rotate-180' : 'text-muted-foreground'}`} />
               </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getRunStatusClasses(run.status)}`}
-                >
-                  {formatRunStatus(run.status)}
-                </span>
-                <ChevronDown
-                  className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
-                />
-              </div>
-            </button>
+            </div>
 
             {isOpen ? (
-              <div className="border-t border-border/70 px-5 py-5">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm">
-                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Latency
-                    </div>
-                    <div className="mt-2 font-medium">{run.latencyMs ?? "n/a"} ms</div>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm">
-                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Validation
-                    </div>
-                    <div className="mt-2 font-medium capitalize">{run.validation.status}</div>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm">
-                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Completed
-                    </div>
-                    <div className="mt-2 font-medium">{run.completedAt ?? "n/a"}</div>
-                  </div>
-                </div>
-
+              <div className="p-4 bg-surface-container-lowest/50 text-xs text-on-surface-variant leading-relaxed font-mono whitespace-pre-wrap overflow-x-auto">
                 {run.error ? (
-                  <div className="mt-4 rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-950">
-                    <div className="font-semibold">Run error</div>
-                    <p className="mt-2 leading-6">{run.error.message}</p>
-                  </div>
+                  <div className="text-rose-500 mb-2 font-bold font-sans">Error: {run.error.message}</div>
                 ) : null}
-
                 {run.validation.issues.length > 0 ? (
-                  <div className="mt-4 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-950">
-                    <div className="font-semibold">Validation issues</div>
-                    <ul className="mt-2 space-y-2">
-                      {run.validation.issues.map((issue) => (
-                        <li key={`${issue.runId}-${issue.path.join(".")}`} className="leading-6">
-                          {issue.path.join(".")}: {issue.message}
-                        </li>
-                      ))}
-                    </ul>
+                  <div className="text-amber-500 mb-2 font-bold font-sans">
+                    {run.validation.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(`\n`)}
                   </div>
                 ) : null}
-
-                <div className="mt-4 rounded-[1.5rem] border border-border/70 bg-background/90 p-4">
-                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    Raw output
-                  </div>
-                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words text-xs leading-6 text-foreground">
-                    {run.rawText ?? "No raw output recorded for this run."}
-                  </pre>
-                </div>
+                {run.rawText ?? "No raw output recorded."}
               </div>
             ) : null}
-          </section>
+          </div>
         );
       })}
     </div>
@@ -886,7 +834,7 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
     pendingSubmissionMode,
     submitPrompt,
   } = controller;
-  const { isTruthPanelOpen } = useTruthPanelState();
+
 
   const handlePromptKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -896,153 +844,122 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
   };
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="border-b border-border/70 bg-card/85">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Ask and analyze
-            </div>
-            <div>
-              <CardTitle className="text-3xl tracking-[-0.04em]">Ask and Analyze</CardTitle>
-              <CardDescription className="mt-2 max-w-3xl">
-                Ask one question, read the combined answer first, and open detailed model evidence
-                only when you need it.
-              </CardDescription>
-            </div>
+    <Card className="flex flex-col h-full w-full border-none shadow-none bg-transparent overflow-hidden relative">
+      <div className="flex-1 overflow-y-auto pb-48">
+        <CardContent className="space-y-6 pt-2">
+          <WorkspaceContext
+            conversationTitle={selectedConversation?.title ?? null}
+            branchName={selectedBranch?.name ?? null}
+            nodeTitle={selectedNode?.title ?? null}
+            pendingSubmissionMode={pendingSubmissionMode}
+            selectedNodeIsHead={selectedNodeIsHead}
+          />
+
+          <PresetPicker
+            selectedPresetId={selectedPresetId}
+            onSelectPresetId={setSelectedPresetId}
+            isBusy={isBusy}
+          />
+
+          <PresetReadinessNotice
+            presetLabel={selectedPresetDefinition.label}
+            readyProviders={selectedPresetReadyProviders}
+            missingHostedProviders={selectedPresetMissingHostedProviders}
+            unavailableLocalProviders={selectedPresetUnavailableLocalProviders}
+          />
+
+          <div className="flex flex-wrap gap-2">
+            {examplePrompts.map((example) => (
+              <Button
+                key={example.label}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isBusy}
+                onClick={() => setPromptDraft(example.prompt)}
+              >
+                {example.label}
+              </Button>
+            ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex rounded-full border border-border/80 bg-background/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Next run: {selectedPresetDefinition.label}
-            </span>
-            <Button type="button" variant="outline" size="sm" onClick={toggleTruthPanel}>
-              {isTruthPanelOpen ? "Hide Model Status" : "Show Model Status"}
-            </Button>
-            <span
-              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getModeBadgeClasses(displayMode)}`}
-            >
-              {formatModeLabel(displayMode)}
-            </span>
+          {inputErrorMessage ? (
+            <div className="rounded-[1.5rem] border border-amber-500/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-950">
+              {inputErrorMessage}
+            </div>
+          ) : null}
+
+          {bootstrapErrorMessage ? (
+            <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-5 py-4 text-sm text-rose-950">
+              {bootstrapErrorMessage}
+            </div>
+          ) : null}
+
+          {runtimeErrorMessage ? (
+            <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-5 py-4 text-sm text-rose-950">
+              {runtimeErrorMessage}
+            </div>
+          ) : null}
+
+          {isBootstrapping ? (
+            <LoadingWorkspaceState />
+          ) : latestSynthesisReport ? (
+            <SynthesisReportView mode={displayMode} report={latestSynthesisReport} />
+          ) : selectedNode ? (
+            <HistoricalNodeState mode={displayMode} node={selectedNode} />
+          ) : (
+            <EmptyWorkspaceState mode={displayMode} />
+          )}
+        </CardContent>
+      </div>
+
+      <div className="absolute bottom-0 w-full left-0 right-0 z-10 px-4 pb-4 ptr-events-none bg-gradient-to-t from-surface via-surface/90 to-transparent pt-12">
+        <div className="w-full bg-surface-container-low border-b-2 border-primary shadow-2xl p-4 ptr-events-auto rounded backdrop-blur-xl">
+          <div className="flex items-end gap-4 w-full">
+            <div className="flex-1 flex flex-col gap-1 w-full relative">
+              <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest pl-1">
+                {pendingSubmissionMode === "fork" ? "Fork Branch Next Steps" : "Logic Input Shell"}
+              </label>
+              <textarea 
+                className="bg-transparent border-none w-full p-1 text-sm focus:ring-0 text-foreground placeholder:text-muted-foreground font-mono resize-none outline-none overflow-y-auto" 
+                placeholder="Refine logic or branch out... Use Cmd/Ctrl+Enter to commit" 
+                rows={1}
+                value={promptDraft}
+                onChange={(event) => setPromptDraft(event.target.value)}
+                onKeyDown={handlePromptKeyDown}
+                disabled={isBusy}
+              ></textarea>
+            </div>
+            
+            <div className="flex gap-2 shrink-0 h-[40px]">
+              {isBootstrapping || isRunning ? (
+                 <Button disabled className="h-full px-4 rounded-none bg-surface-container-high border-none font-bold uppercase text-xs tracking-tight">
+                    <LoaderCircle className="h-4 w-4 animate-spin mr-2" />
+                    Running...
+                 </Button>
+              ) : pendingSubmissionMode === "fork" ? (
+                <button 
+                  disabled={isBusy}
+                  onClick={() => void submitPrompt()}
+                  className="bg-surface-container-high text-foreground h-full px-4 flex items-center gap-2 hover:bg-surface-bright transition-all cursor-pointer border-none rounded-sm"
+                >
+                  <GitFork className="h-4 w-4 text-primary" />
+                  <span className="text-xs font-bold uppercase tracking-tight hidden sm:inline">Branch Fork</span>
+                </button>
+               ) : (
+                <button 
+                  disabled={isBusy}
+                  onClick={() => void submitPrompt()}
+                  className="bg-gradient-to-br from-primary to-primary-container text-primary-foreground h-full px-4 flex items-center gap-2 hover:opacity-90 transition-all cursor-pointer border-none rounded-sm"
+                >
+                  <Play className="h-4 w-4" />
+                  <span className="text-xs font-bold uppercase tracking-tight hidden sm:inline">Commit Context</span>
+                </button>
+               )}
+            </div>
           </div>
         </div>
-      </CardHeader>
-
-      <CardContent className="space-y-6 pt-6">
-        <WorkspaceContext
-          conversationTitle={selectedConversation?.title ?? null}
-          branchName={selectedBranch?.name ?? null}
-          nodeTitle={selectedNode?.title ?? null}
-          pendingSubmissionMode={pendingSubmissionMode}
-          selectedNodeIsHead={selectedNodeIsHead}
-        />
-
-        <PresetPicker
-          selectedPresetId={selectedPresetId}
-          onSelectPresetId={setSelectedPresetId}
-          isBusy={isBusy}
-        />
-
-        <PresetReadinessNotice
-          presetLabel={selectedPresetDefinition.label}
-          readyProviders={selectedPresetReadyProviders}
-          missingHostedProviders={selectedPresetMissingHostedProviders}
-          unavailableLocalProviders={selectedPresetUnavailableLocalProviders}
-        />
-
-        <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <label htmlFor="workspace-prompt" className="text-sm font-medium">
-                  Question
-                </label>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Ask what you want compared or reviewed. Use `Cmd/Ctrl+Enter` to submit.
-                </p>
-              </div>
-              <Button
-                type="button"
-                disabled={isBusy}
-                onClick={() => void submitPrompt()}
-                className="min-w-[190px]"
-              >
-                {isBootstrapping ? (
-                  <>
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Restoring...
-                  </>
-                ) : isRunning ? (
-                  <>
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Running...
-                  </>
-                ) : pendingSubmissionMode === "fork" ? (
-                  "Branch and analyze"
-                ) : (
-                  "Analyze question"
-                )}
-              </Button>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {examplePrompts.map((example) => (
-                <Button
-                  key={example.label}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isBusy}
-                  onClick={() => setPromptDraft(example.prompt)}
-                >
-                  {example.label}
-                </Button>
-              ))}
-            </div>
-
-            <textarea
-              id="workspace-prompt"
-              value={promptDraft}
-              onChange={(event) => setPromptDraft(event.target.value)}
-              onKeyDown={handlePromptKeyDown}
-              disabled={isBusy}
-              spellCheck={false}
-              rows={6}
-              placeholder="Example: Compare Zustand vs Redux Toolkit for this desktop app and recommend which one fits better."
-              className="min-h-[160px] w-full rounded-[1.5rem] border border-border/80 bg-card/85 px-4 py-4 text-sm leading-7 shadow-sm shadow-black/5 outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
-            />
-          </div>
-        </section>
-
-        {inputErrorMessage ? (
-          <div className="rounded-[1.5rem] border border-amber-500/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-950">
-            {inputErrorMessage}
-          </div>
-        ) : null}
-
-        {bootstrapErrorMessage ? (
-          <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-5 py-4 text-sm text-rose-950">
-            {bootstrapErrorMessage}
-          </div>
-        ) : null}
-
-        {runtimeErrorMessage ? (
-          <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-5 py-4 text-sm text-rose-950">
-            {runtimeErrorMessage}
-          </div>
-        ) : null}
-
-        {isBootstrapping ? (
-          <LoadingWorkspaceState />
-        ) : latestSynthesisReport ? (
-          <SynthesisReportView mode={displayMode} report={latestSynthesisReport} />
-        ) : selectedNode ? (
-          <HistoricalNodeState mode={displayMode} node={selectedNode} />
-        ) : (
-          <EmptyWorkspaceState mode={displayMode} />
-        )}
-      </CardContent>
+      </div>
     </Card>
   );
 }

@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 
 :root {
+  /* Shadcn Light Theme Defaults */
   --background: oklch(0.981 0.007 85.9);
   --foreground: oklch(0.232 0.033 258.2);
   --card: oklch(0.994 0.002 84.7 / 92%);
@@ -17,7 +18,54 @@
   --border: oklch(0.861 0.015 82.5);
   --input: oklch(0.915 0.013 82.9);
   --ring: oklch(0.576 0.19 40.2);
-  --radius: 1rem;
+  --radius: 0.5rem;
+
+  /* Custom Light Palette for Alae */
+  --surface: #ffffff;
+  --surface-container-lowest: #f1f5f9;
+  --surface-container-low: #f8fafc;
+  --surface-container: #ffffff;
+  --surface-container-high: #f1f5f9;
+  --surface-container-highest: #e2e8f0;
+  --on-surface: #0f172a;
+  --on-surface-variant: #334155;
+  --outline: #94a3b8;
+  --outline-variant: #cbd5e1;
+  --error: #ef4444;
+  --on-error: #ffffff;
+}
+
+.dark {
+  /* Alae Dark Theme - based on PRD & Demo Reference */
+  --background: #131313;
+  --foreground: #e5e2e1;
+  --card: #1c1b1b;
+  --card-foreground: #e5e2e1;
+  --muted: #2a2a2a;
+  --muted-foreground: #8b90a0;
+  --primary: #3cd7ff;
+  --primary-foreground: #003642;
+  --secondary: #ffdb9d;
+  --secondary-foreground: #412d00;
+  --accent: #353534;
+  --accent-foreground: #e5e2e1;
+  --border: #414754;
+  --input: #414754;
+  --ring: #3cd7ff;
+
+  /* Demo Custom Palette Extensions for UI */
+  --surface: #131313;
+  --surface-container-lowest: #0e0e0e;
+  --surface-container-low: #1c1b1b;
+  --surface-container: #201f1f;
+  --surface-container-high: #2a2a2a;
+  --surface-container-highest: #353534;
+  --on-surface: #e5e2e1;
+  --on-surface-variant: #c1c6d7;
+  --outline: #8b90a0;
+  --outline-variant: #414754;
+  --error: #ffb4ab;
+  --on-error: #690005;
 }
 
 @theme inline {
@@ -36,11 +84,28 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 0.5rem);
-  --radius-md: calc(var(--radius) - 0.25rem);
+  
+  --color-surface: var(--surface);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-outline: var(--outline);
+  --color-outline-variant: var(--outline-variant);
+  --color-error: var(--error);
+  --color-on-error: var(--on-error);
+
+  --radius-sm: calc(var(--radius) - 0.25rem);
+  --radius-md: calc(var(--radius) - 0.125rem);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 0.375rem);
-  --font-sans: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  --radius-xl: calc(var(--radius) + 0.25rem);
+  
+  --font-sans: "Inter", "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  --font-headline: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
 }
 
 @layer base {
@@ -48,19 +113,41 @@
     @apply border-border;
   }
 
-  html {
-    color-scheme: light;
-  }
-
   body {
-    @apply min-h-screen bg-background font-sans text-foreground antialiased;
-    background-image:
-      radial-gradient(circle at top left, rgb(250 210 124 / 0.45), transparent 34%),
-      radial-gradient(circle at top right, rgb(195 223 255 / 0.3), transparent 28%),
-      linear-gradient(180deg, rgb(255 253 247 / 0.96), rgb(247 244 238 / 0.98));
+    @apply min-h-screen bg-background font-sans text-foreground antialiased overflow-hidden flex flex-col;
   }
 
   #root {
-    @apply min-h-screen;
+    @apply h-screen flex flex-col overflow-hidden;
   }
+}
+
+@layer utilities {
+  .breathing-critical {
+    animation: breathing-red 3s ease-in-out infinite;
+  }
+  
+  .recessed-code {
+    box-shadow: inset 0px 2px 4px rgba(0,0,0,0.5);
+  }
+}
+
+@keyframes breathing-red {
+  0%, 100% { box-shadow: 0 0 5px rgba(255, 85, 69, 0.2); background-color: rgba(255, 85, 69, 0.05); }
+  50% { box-shadow: 0 0 15px rgba(255, 85, 69, 0.4); background-color: rgba(255, 85, 69, 0.1); }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface-container-lowest);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-container-highest);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline);
 }
