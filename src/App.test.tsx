@@ -187,12 +187,9 @@ describe("App", () => {
     render(<App />);
 
     expect(
-      screen.getByRole("heading", {
-        name: /Ask one question, compare multiple model answers, and keep the history/i,
-      }),
+      await screen.findByText(/Ask a question and get a combined answer/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Analysis history" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { level: 2, name: "Ask and Analyze" })).toBeInTheDocument();
+    expect(screen.getByText("Saved analyses")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Model providers" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Model status" })).toBeInTheDocument();
 
@@ -238,14 +235,14 @@ describe("App", () => {
       }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show Model Status" }));
+    fireEvent.click(screen.getByRole("button", { name: /Show details/i }));
 
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(true);
     });
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByText("Overview")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide Model Status" }));
+    fireEvent.click(screen.getByRole("button", { name: /Hide details/i }));
 
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(false);

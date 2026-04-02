@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   Bot,
@@ -18,7 +19,6 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { synthesisPresetDefinitions } from "@/features/consensus";
-// Removed unused truth panel import
 import {
   getProviderAccessSectionId,
   getProviderDefinition,
@@ -49,113 +49,68 @@ const examplePrompts = [
   },
 ] as const;
 
-function formatModeLabel(mode: "mock" | "real") {
-  return mode === "real" ? "Live" : "Demo";
+function formatModeLabel(mode: "mock" | "real", t: (key: string) => string) {
+  return mode === "real" ? t("Live") : t("Demo");
 }
 
-function formatReportStatus(status: SynthesisReport["status"]) {
-  if (status === "ready") {
-    return "Ready";
-  }
-
-  if (status === "partial") {
-    return "Partial";
-  }
-
-  return "Failed";
+function formatReportStatus(status: SynthesisReport["status"], t: (key: string) => string) {
+  if (status === "ready") return t("Ready");
+  if (status === "partial") return t("Partial");
+  return t("Failed");
 }
 
-function formatRunStatus(status: ModelRun["status"]) {
-  if (status === "completed") {
-    return "Completed";
-  }
-
-  if (status === "running") {
-    return "Running";
-  }
-
-  if (status === "pending") {
-    return "Pending";
-  }
-
-  return "Failed";
+function formatRunStatus(status: ModelRun["status"], t: (key: string) => string) {
+  if (status === "completed") return t("Completed");
+  if (status === "running") return t("Running");
+  if (status === "pending") return t("Pending");
+  return t("Failed");
 }
 
-function formatNodeStatus(status: ConversationNode["status"]) {
-  if (status === "completed") {
-    return "Completed";
-  }
-
-  if (status === "running") {
-    return "Running";
-  }
-
-  if (status === "failed") {
-    return "Failed";
-  }
-
-  return "Idle";
+function formatNodeStatus(status: ConversationNode["status"], t: (key: string) => string) {
+  if (status === "completed") return t("Completed");
+  if (status === "running") return t("Running");
+  if (status === "failed") return t("Failed");
+  return t("Idle");
 }
 
 function getModeBadgeClasses(mode: "mock" | "real") {
-  return mode === "real"
-    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900"
-    : "border-amber-500/30 bg-amber-500/10 text-amber-900";
+  return mode === "real" ? "badge-success" : "badge-warning";
 }
 
 function getReportStatusClasses(status: SynthesisReport["status"]) {
-  if (status === "ready") {
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-900";
-  }
-
-  if (status === "partial") {
-    return "border-amber-500/30 bg-amber-500/10 text-amber-900";
-  }
-
-  return "border-rose-500/30 bg-rose-500/10 text-rose-900";
+  if (status === "ready") return "badge-success";
+  if (status === "partial") return "badge-warning";
+  return "badge-error";
 }
 
 function getRunStatusClasses(status: ModelRun["status"] | ConversationNode["status"]) {
-  if (status === "completed") {
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-900";
-  }
-
-  if (status === "running") {
-    return "border-sky-500/30 bg-sky-500/10 text-sky-900";
-  }
-
-  if (status === "pending" || status === "idle") {
-    return "border-border/80 bg-background/80 text-muted-foreground";
-  }
-
-  return "border-rose-500/30 bg-rose-500/10 text-rose-900";
+  if (status === "completed") return "badge-success";
+  if (status === "running") return "badge-info";
+  if (status === "pending" || status === "idle") return "badge-neutral";
+  return "badge-error";
 }
 
 function formatTokenUsage(run: ModelRun) {
   const { inputTokens, outputTokens, totalTokens } = run.usage;
-
   return [
-    `Input ${inputTokens ?? "n/a"}`,
-    `Output ${outputTokens ?? "n/a"}`,
-    `Total ${totalTokens ?? "n/a"}`,
+    `In ${inputTokens ?? "–"}`,
+    `Out ${outputTokens ?? "–"}`,
+    `Σ ${totalTokens ?? "–"}`,
   ].join(" · ");
 }
 
-function buildModeNotice(mode: "mock" | "real") {
+function buildModeNotice(mode: "mock" | "real", t: (key: string) => string) {
   if (mode === "real") {
     return {
-      title: "Live model mode is ready.",
-      description:
-        "This run will call real models because the required hosted providers are configured. Local providers such as Ollama do not need keys.",
-      classes: "border-emerald-500/25 bg-emerald-500/10 text-emerald-950",
+      title: t("Live model mode is ready."),
+      description: t("live_mode_description"),
+      classes: "badge-success",
     };
   }
-
   return {
-    title: "Demo mode is on.",
-    description:
-      "This run will use built-in sample responses until you configure the hosted providers required by the active preset. The default free preset uses OpenRouter plus optional local Ollama models.",
-    classes: "border-amber-500/25 bg-amber-500/10 text-amber-950",
+    title: t("Demo mode is on."),
+    description: t("demo_mode_description"),
+    classes: "badge-warning",
   };
 }
 
@@ -182,13 +137,13 @@ function buildPresetReadinessNotice(props: {
       description: [
         `Missing hosted access: ${missingHostedLabels}. This preset will stay in Demo until those providers are configured.`,
         props.unavailableLocalProviders.length > 0 ?
-          `Optional local runtime unavailable: ${unavailableLocalLabels}.`
+          `Optional local: ${unavailableLocalLabels}.`
         : null,
         localErrorDetails.length > 0 ? `Last local check: ${localErrorDetails.join(" · ")}.` : null,
       ]
         .filter(Boolean)
         .join(" "),
-      classes: "border-amber-500/25 bg-amber-500/10 text-amber-950",
+      classes: "badge-warning",
     };
   }
 
@@ -196,13 +151,13 @@ function buildPresetReadinessNotice(props: {
     return {
       title: `${props.presetLabel} can run live with reduced local coverage.`,
       description: [
-        readyLabels ? `Hosted access is ready for ${readyLabels}.` : "Hosted access is ready.",
+        readyLabels ? `Hosted ready: ${readyLabels}.` : "Hosted access is ready.",
         `Optional local runtime unavailable: ${unavailableLocalLabels}. Live runs can continue, but those local slots may fail and the report may be partial.`,
         localErrorDetails.length > 0 ? `Last local check: ${localErrorDetails.join(" · ")}.` : null,
       ]
         .filter(Boolean)
         .join(" "),
-      classes: "border-sky-500/25 bg-sky-500/10 text-sky-950",
+      classes: "badge-info",
     };
   }
 
@@ -210,42 +165,31 @@ function buildPresetReadinessNotice(props: {
     title: `${props.presetLabel} is ready for live runs.`,
     description:
       readyLabels.length > 0 ?
-        `Available providers for the next run: ${readyLabels}.`
-      : "All required providers are configured for the next run.",
-    classes: "border-emerald-500/25 bg-emerald-500/10 text-emerald-950",
+        `Available: ${readyLabels}.`
+      : "All required providers are configured.",
+    classes: "badge-success",
   };
 }
 
 function focusProviderAccess(providerId?: SupportedProviderId) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
+  if (typeof document === "undefined") return;
   const targetId = providerId ? getProviderAccessSectionId(providerId) : providerAccessCardId;
   const target = document.getElementById(targetId);
-
-  if (!(target instanceof HTMLElement)) {
-    return;
-  }
-
-  target.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
+  if (!(target instanceof HTMLElement)) return;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
   target.focus();
 }
 
-function renderList(items: string[]) {
+function renderList(items: string[], t: (key: string) => string) {
   if (items.length === 0) {
-    return <p className="text-sm leading-6 text-muted-foreground">No items yet.</p>;
+    return <p className="text-sm leading-6 text-muted-foreground">{t("No items yet.")}</p>;
   }
-
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-2">
       {items.map((item) => (
         <li
           key={item}
-          className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm leading-6"
+          className="rounded-lg border border-border/50 bg-background/80 px-4 py-2.5 text-sm leading-6"
         >
           {item}
         </li>
@@ -254,44 +198,50 @@ function renderList(items: string[]) {
   );
 }
 
+/* ─────  Sub Components  ───── */
+
 function PresetPicker(props: {
   selectedPresetId: WorkspaceController["selectedPresetId"];
   onSelectPresetId: WorkspaceController["setSelectedPresetId"];
   isBusy: boolean;
 }) {
+  const { t } = useTranslation();
   return (
-    <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">
-      <div className="flex flex-col gap-2">
-        <div className="text-sm font-medium">Run preset</div>
-        <p className="text-sm leading-6 text-muted-foreground">
-          Choose the model mix for the next analysis run.
-        </p>
+    <section className="rounded-lg border border-border/50 bg-background/80 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-1.5">
+          <div className="text-sm font-medium">{t("Run preset")}</div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {t("Choose the model mix for the next analysis run.")}
+          </p>
+        </div>
+        <div className="text-xs font-medium text-muted-foreground">
+          Next run: {synthesisPresetDefinitions.find(p => p.id === props.selectedPresetId)?.label ?? "—"}
+        </div>
       </div>
-
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
         {synthesisPresetDefinitions.map((preset) => {
           const isSelected = preset.id === props.selectedPresetId;
-
           return (
             <button
               key={preset.id}
               type="button"
               disabled={props.isBusy}
               aria-pressed={isSelected}
-              className={`rounded-[1.5rem] border px-4 py-4 text-left transition-colors ${
+              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
                 isSelected
                   ? "border-primary/40 bg-primary/10"
-                  : "border-border/70 bg-card/75 hover:bg-card"
+                  : "border-border/50 bg-card/60 hover:bg-accent"
               } disabled:cursor-not-allowed disabled:opacity-60`}
               onClick={() => props.onSelectPresetId(preset.id)}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-semibold">{preset.label}</div>
-                <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
                   {preset.providerSummary}
                 </span>
               </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">{preset.description}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{preset.description}</p>
             </button>
           );
         })}
@@ -306,6 +256,7 @@ function PresetReadinessNotice(props: {
   missingHostedProviders: WorkspaceController["selectedPresetMissingHostedProviders"];
   unavailableLocalProviders: WorkspaceController["selectedPresetUnavailableLocalProviders"];
 }) {
+  const { t } = useTranslation();
   const notice = buildPresetReadinessNotice(props);
   const firstMissingHostedProvider = props.missingHostedProviders[0] ?? null;
   const firstUnavailableLocalProvider = props.unavailableLocalProviders[0] ?? null;
@@ -315,19 +266,19 @@ function PresetReadinessNotice(props: {
     : null;
 
   return (
-    <section className={`rounded-[1.75rem] border px-5 py-4 ${notice.classes}`}>
-      <div className="text-xs uppercase tracking-[0.18em]">Next run status</div>
-      <div className="mt-2 text-sm font-semibold">{notice.title}</div>
-      <p className="mt-2 text-sm leading-6">{notice.description}</p>
+    <section className={`rounded-lg border px-4 py-3 ${notice.classes}`}>
+      <div className="text-[10px] uppercase tracking-widest">{t("Next run status")}</div>
+      <div className="mt-1.5 text-sm font-semibold">{notice.title}</div>
+      <p className="mt-1.5 text-xs leading-5">{notice.description}</p>
 
       {localSetupHint ? (
-        <div className="mt-4 rounded-2xl border border-current/15 bg-background/50 px-4 py-3 text-sm leading-6">
+        <div className="mt-3 rounded-md border border-current/15 bg-background/50 px-3 py-2 text-xs leading-5">
           {localSetupHint}
         </div>
       ) : null}
 
       {firstMissingHostedProvider || firstUnavailableLocalProvider ? (
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="mt-3 flex flex-wrap gap-2">
           {firstMissingHostedProvider ? (
             <Button
               type="button"
@@ -335,7 +286,7 @@ function PresetReadinessNotice(props: {
               size="sm"
               onClick={() => focusProviderAccess(firstMissingHostedProvider.id)}
             >
-              Open provider access
+              {t("Open provider access")}
             </Button>
           ) : null}
           {firstUnavailableLocalProvider ? (
@@ -355,83 +306,64 @@ function PresetReadinessNotice(props: {
 }
 
 function EmptyWorkspaceState(props: { mode: "mock" | "real" }) {
-  const notice = buildModeNotice(props.mode);
+  const { t } = useTranslation();
+  const notice = buildModeNotice(props.mode, t);
 
   return (
-    <div className="space-y-6 rounded-[2rem] border border-dashed border-border/80 bg-background/55 p-6">
-      <div className="space-y-4">
-        <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-          Start here
+    <div className="space-y-5">
+      {/* Hero area */}
+      <div className="space-y-3">
+        <div className="inline-flex items-center gap-2 rounded-lg border border-border/50 bg-card/80 px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+          <Sparkles className="h-3 w-3 text-primary" />
+          {t("Start here")}
         </div>
-        <div className="space-y-3">
-          <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
-            Ask a question and get a combined answer.
-          </h3>
-          <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-            Start with one question. Alae compares several model responses, highlights agreements
-            and disagreements, and keeps each step in a saved local history.
-          </p>
-        </div>
+        <h3 className="text-xl font-semibold tracking-tight text-balance">
+          {t("Ask a question and get a combined answer.")}
+        </h3>
+        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+          {t("Start with one question. Alae compares several model responses, highlights agreements and disagreements, and keeps each step in a saved local history.")}
+        </p>
       </div>
 
-      <div className={`rounded-[1.5rem] border px-5 py-4 ${notice.classes}`}>
+      {/* Mode indicator */}
+      <div className={`rounded-lg border px-4 py-3 ${notice.classes}`}>
         <div className="text-sm font-semibold">{notice.title}</div>
-        <p className="mt-2 text-sm leading-6">{notice.description}</p>
+        <p className="mt-1 text-xs leading-5">{notice.description}</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[1.5rem] border border-border/70 bg-card/70 p-5">
-          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            01. Ask
+      {/* Steps */}
+      <div className="grid gap-3 md:grid-cols-3">
+        {[
+          { key: "01. Ask", descKey: "Ask step description" },
+          { key: "02. Compare", descKey: "Compare step description" },
+          { key: "03. Inspect", descKey: "Inspect step description" },
+        ].map((step) => (
+          <div key={step.key} className="rounded-lg border border-border/50 bg-card/60 p-4">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              {t(step.key)}
+            </div>
+            <p className="mt-2 text-xs leading-5">{t(step.descKey)}</p>
           </div>
-          <p className="mt-3 text-sm leading-6">
-            Type a question in the center box and submit with the button or `Cmd/Ctrl+Enter`.
-          </p>
-        </div>
-        <div className="rounded-[1.5rem] border border-border/70 bg-card/70 p-5">
-          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            02. Compare
-          </div>
-          <p className="mt-3 text-sm leading-6">
-            Read the combined answer first, then scan agreements, disagreements, and recommended
-            next steps.
-          </p>
-        </div>
-        <div className="rounded-[1.5rem] border border-border/70 bg-card/70 p-5">
-          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            03. Inspect
-          </div>
-          <p className="mt-3 text-sm leading-6">
-            Open model status only when you want raw output, token usage, latency, or validation
-            details.
-          </p>
-        </div>
+        ))}
       </div>
     </div>
   );
 }
 
 function LoadingWorkspaceState() {
+  const { t } = useTranslation();
   return (
-    <div className="space-y-6 rounded-[2rem] border border-border/80 bg-background/65 p-6">
-      <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-        <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
-        Restoring your history
+    <div className="space-y-4 rounded-lg border border-border/50 bg-background/65 p-5">
+      <div className="inline-flex items-center gap-2 rounded-lg border border-border/50 bg-card/80 px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+        <LoaderCircle className="h-3 w-3 animate-spin text-primary" />
+        {t("Restoring your history")}
       </div>
-
-      <div className="space-y-3">
-        <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
-          Loading your latest saved analysis.
-        </h3>
-        <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-          Alae is reopening your last saved step before enabling new questions.
-        </p>
-      </div>
-
-      <div className="rounded-[1.5rem] border border-border/70 bg-card/75 px-5 py-4 text-sm leading-6 text-muted-foreground">
-        New questions are temporarily disabled until the latest local state finishes loading.
-      </div>
+      <h3 className="text-lg font-semibold tracking-tight text-balance">
+        {t("Loading your latest saved analysis.")}
+      </h3>
+      <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+        {t("Alae is reopening your last saved step before enabling new questions.")}
+      </p>
     </div>
   );
 }
@@ -443,123 +375,80 @@ function WorkspaceContext(props: {
   pendingSubmissionMode: "append" | "fork";
   selectedNodeIsHead: boolean;
 }) {
+  const { t } = useTranslation();
   const submissionHint =
     props.pendingSubmissionMode === "fork"
-      ? "Your next question will start a new branch from the selected saved step."
-      : props.selectedNodeIsHead
-        ? "Your next question will continue from the current path."
-        : "Your next question will continue from the selected path.";
+      ? t("Branch next run")
+      : t("Continue current path");
 
   return (
-    <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex rounded-full border border-border/80 bg-card/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          Current context
-        </span>
-        <span className="inline-flex rounded-full border border-border/80 bg-card/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          {props.pendingSubmissionMode === "fork" ? "Branch next run" : "Continue current path"}
-        </span>
-      </div>
-
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            Analysis
-          </div>
-          <div className="mt-2 text-sm font-medium">
-            {props.conversationTitle ?? "No saved analysis selected"}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            Path
-          </div>
-          <div className="mt-2 text-sm font-medium">{props.branchName ?? "No path selected"}</div>
-        </div>
-        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            Step
-          </div>
-          <div className="mt-2 text-sm font-medium">{props.nodeTitle ?? "No step selected"}</div>
-        </div>
-      </div>
-
-      <p className="mt-4 text-sm leading-6 text-muted-foreground">{submissionHint}</p>
-    </section>
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="font-medium text-muted-foreground">{t("Analysis")}:</span>
+      <span className="truncate font-medium">{props.conversationTitle ?? t("No saved analysis selected")}</span>
+      <span className="text-muted-foreground">›</span>
+      <span className="truncate text-muted-foreground">{props.branchName ?? t("No path selected")}</span>
+      <span className="text-muted-foreground">›</span>
+      <span className="truncate text-muted-foreground">{props.nodeTitle ?? t("No step selected")}</span>
+      <span className="ml-auto rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wider badge-neutral">
+        {submissionHint}
+      </span>
+    </div>
   );
 }
 
 function HistoricalNodeState(props: { mode: "mock" | "real"; node: ConversationNode }) {
-  const modeNotice = buildModeNotice(props.mode);
+  const { t } = useTranslation();
+  const modeNotice = buildModeNotice(props.mode, t);
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[2rem] border border-border/70 bg-card/80 p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <History className="h-6 w-6" />
-              </div>
+    <div className="space-y-4">
+      <section className="rounded-lg border border-border/50 bg-card/80 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5 text-primary" />
               <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  Saved step
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {t("Saved step")}
                 </div>
-                <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
-                  {props.node.title}
-                </h3>
+                <h3 className="text-lg font-semibold tracking-tight">{props.node.title}</h3>
               </div>
             </div>
-            <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              This saved step does not have a stored combined answer, but you can still branch
-              from it and continue the analysis.
-            </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getModeBadgeClasses(props.mode)}`}
-            >
-              {formatModeLabel(props.mode)}
+          <div className="flex items-center gap-1.5">
+            <span className={`inline-flex rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${getModeBadgeClasses(props.mode)}`}>
+              {formatModeLabel(props.mode, t)}
             </span>
-            <span
-              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getRunStatusClasses(props.node.status)}`}
-            >
-              {formatNodeStatus(props.node.status)}
+            <span className={`inline-flex rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${getRunStatusClasses(props.node.status)}`}>
+              {formatNodeStatus(props.node.status, t)}
             </span>
           </div>
         </div>
 
-        <div className={`mt-6 rounded-[1.5rem] border px-5 py-4 ${modeNotice.classes}`}>
+        <div className={`mt-4 rounded-lg border px-4 py-3 ${modeNotice.classes}`}>
           <div className="text-sm font-semibold">{modeNotice.title}</div>
-          <p className="mt-2 text-sm leading-6">{modeNotice.description}</p>
+          <p className="mt-1 text-xs leading-5">{modeNotice.description}</p>
         </div>
       </section>
 
-      <section className="rounded-[1.75rem] border border-border/70 bg-card/75 p-5">
-        <div className="flex items-center gap-3">
-          <Waypoints className="h-5 w-5 text-primary" />
-          <h4 className="text-lg font-semibold">Checkpoint details</h4>
+      <section className="rounded-lg border border-border/50 bg-card/70 p-5">
+        <div className="flex items-center gap-2">
+          <Waypoints className="h-4 w-4 text-primary" />
+          <h4 className="text-sm font-semibold">{t("Checkpoint details")}</h4>
         </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Status
-            </div>
-            <div className="mt-2 text-sm font-medium">{formatNodeStatus(props.node.status)}</div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-border/50 bg-background/80 p-3">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{t("Status")}</div>
+            <div className="mt-1 text-sm font-medium">{formatNodeStatus(props.node.status, t)}</div>
           </div>
-          <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Created
-            </div>
-            <div className="mt-2 text-sm font-medium">{props.node.createdAt}</div>
+          <div className="rounded-lg border border-border/50 bg-background/80 p-3">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{t("Created")}</div>
+            <div className="mt-1 text-sm font-medium">{props.node.createdAt}</div>
           </div>
         </div>
-        <div className="mt-4 rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
-          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Question</div>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-            {props.node.prompt}
-          </p>
+        <div className="mt-3 rounded-lg border border-border/50 bg-background/80 p-3">
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{t("Question")}</div>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{props.node.prompt}</p>
         </div>
       </section>
     </div>
@@ -567,47 +456,48 @@ function HistoricalNodeState(props: { mode: "mock" | "real"; node: ConversationN
 }
 
 function ModelRunsAccordion(props: { runs: ModelRun[] }) {
+  const { t } = useTranslation();
   const [openRunId, setOpenRunId] = useState<string | null>(props.runs[0]?.id ?? null);
 
   return (
     <div className="space-y-1">
       {props.runs.map((run) => {
         const isOpen = openRunId === run.id;
-        const colorClass = run.status === "completed" ? "text-primary" : run.status === "failed" ? "text-rose-500" : "text-muted-foreground";
+        const colorClass = run.status === "completed" ? "text-primary" : run.status === "failed" ? "text-destructive" : "text-muted-foreground";
 
         return (
           <div
             key={run.id}
-            className={`rounded-sm transition-colors border border-border/20 ${isOpen ? 'bg-surface-container-high' : 'bg-surface-container-low hover:bg-surface-container-high cursor-pointer'}`}
+            className={`rounded-lg transition-colors border border-border/30 ${isOpen ? 'bg-surface-container-high' : 'bg-surface-container-low hover:bg-surface-container-high cursor-pointer'}`}
           >
-            <div className={`p-4 flex items-center justify-between ${isOpen ? 'border-b border-border/20' : ''}`} onClick={() => setOpenRunId(openRunId === run.id ? null : run.id)}>
-              <div className="flex w-full min-w-0 items-center gap-4">
-                <div className={`text-xl font-bold flex items-center justify-center w-8 h-8 rounded shrink-0 ${colorClass} bg-background`}>
+            <div className={`p-3 flex items-center justify-between ${isOpen ? 'border-b border-border/20' : ''}`} onClick={() => setOpenRunId(openRunId === run.id ? null : run.id)}>
+              <div className="flex w-full min-w-0 items-center gap-3">
+                <div className={`text-sm font-bold flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${colorClass} bg-background border border-border/30`}>
                     {run.role.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-bold truncate ${isOpen ? 'text-primary' : 'text-foreground'}`}>
+                  <div className={`text-xs font-semibold truncate ${isOpen ? 'text-primary' : 'text-foreground'}`}>
                     {run.provider} / {run.model}
                   </div>
-                  <div className="text-[10px] font-mono text-muted-foreground uppercase truncate mt-1">
-                    {formatRunStatus(run.status)} • {formatTokenUsage(run)} • {run.latencyMs ?? 0}ms
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase truncate mt-0.5">
+                    {formatRunStatus(run.status, t)} · {formatTokenUsage(run)} · {run.latencyMs ?? 0}ms
                   </div>
                 </div>
-                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-300 ${isOpen ? 'text-primary rotate-180' : 'text-muted-foreground'}`} />
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${isOpen ? 'text-primary rotate-180' : 'text-muted-foreground'}`} />
               </div>
             </div>
 
             {isOpen ? (
-              <div className="p-4 bg-surface-container-lowest/50 text-xs text-on-surface-variant leading-relaxed font-mono whitespace-pre-wrap overflow-x-auto">
+              <div className="p-3 bg-surface-container-lowest/50 text-xs text-on-surface-variant leading-relaxed font-mono whitespace-pre-wrap overflow-x-auto">
                 {run.error ? (
-                  <div className="text-rose-500 mb-2 font-bold font-sans">Error: {run.error.message}</div>
+                  <div className="text-destructive mb-2 font-bold font-sans">{t("Error")}: {run.error.message}</div>
                 ) : null}
                 {run.validation.issues.length > 0 ? (
-                  <div className="text-amber-500 mb-2 font-bold font-sans">
+                  <div className="text-status-warning-fg mb-2 font-bold font-sans">
                     {run.validation.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(`\n`)}
                   </div>
                 ) : null}
-                {run.rawText ?? "No raw output recorded."}
+                {run.rawText ?? t("No raw output recorded.")}
               </div>
             ) : null}
           </div>
@@ -618,122 +508,103 @@ function ModelRunsAccordion(props: { runs: ModelRun[] }) {
 }
 
 function SynthesisReportView(props: { mode: "mock" | "real"; report: SynthesisReport }) {
-  const modeNotice = buildModeNotice(props.mode);
+  const { t } = useTranslation();
+  const modeNotice = buildModeNotice(props.mode, t);
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[2rem] border border-border/70 bg-card/80 p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <BrainCircuit className="h-6 w-6" />
-              </div>
+    <div className="space-y-4">
+      {/* Header */}
+      <section className="rounded-lg border border-border/50 bg-card/80 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <BrainCircuit className="h-5 w-5 text-primary" />
               <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  Synthesis Report
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {t("Synthesis Report")}
                 </div>
-                <h3 className="text-2xl font-semibold tracking-[-0.03em] text-balance">
-                  {props.report.summary}
-                </h3>
+                <h3 className="text-lg font-semibold tracking-tight">{props.report.summary}</h3>
               </div>
             </div>
-            <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              Question: {props.report.prompt}
+            <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
+              {t("Question")}: {props.report.prompt}
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getModeBadgeClasses(props.mode)}`}
-            >
-              {formatModeLabel(props.mode)}
+          <div className="flex items-center gap-1.5">
+            <span className={`inline-flex rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${getModeBadgeClasses(props.mode)}`}>
+              {formatModeLabel(props.mode, t)}
             </span>
-            <span
-              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getReportStatusClasses(props.report.status)}`}
-            >
-              {formatReportStatus(props.report.status)}
+            <span className={`inline-flex rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${getReportStatusClasses(props.report.status)}`}>
+              {formatReportStatus(props.report.status, t)}
             </span>
           </div>
         </div>
 
-        <div className={`mt-6 rounded-[1.5rem] border px-5 py-4 ${modeNotice.classes}`}>
+        <div className={`mt-4 rounded-lg border px-4 py-3 ${modeNotice.classes}`}>
           <div className="text-sm font-semibold">{modeNotice.title}</div>
-          <p className="mt-2 text-sm leading-6">{modeNotice.description}</p>
+          <p className="mt-1 text-xs leading-5">{modeNotice.description}</p>
         </div>
       </section>
 
-      <div className="grid gap-4">
-        <section className="rounded-[1.75rem] border border-border/70 bg-card/75 p-5">
-          <div className="flex items-center gap-3">
-            <Sparkles className="h-5 w-5 text-primary" />
-            <h4 className="text-lg font-semibold">Summary</h4>
+      {/* Report Sections */}
+      <div className="grid gap-3">
+        {/* Summary */}
+        <section className="rounded-lg border border-border/50 bg-card/70 p-5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-semibold">{t("Summary")}</h4>
           </div>
-          <p className="mt-4 text-sm leading-7 text-muted-foreground">{props.report.summary}</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">{props.report.summary}</p>
         </section>
 
-        <section className="rounded-[1.75rem] border border-border/70 bg-card/75 p-5">
-          <div className="flex items-center gap-3">
-            <Waypoints className="h-5 w-5 text-primary" />
-            <h4 className="text-lg font-semibold">Consensus</h4>
+        {/* Consensus */}
+        <section className="rounded-lg border border-border/50 bg-card/70 p-5">
+          <div className="flex items-center gap-2">
+            <Waypoints className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-semibold">{t("Consensus")}</h4>
           </div>
-          <p className="mt-4 text-sm leading-7 text-muted-foreground">
-            {props.report.consensus.summary}
-          </p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">{props.report.consensus.summary}</p>
           {props.report.consensus.items.length > 0 ? (
-            <ul className="mt-4 space-y-3">
+            <ul className="mt-3 space-y-2">
               {props.report.consensus.items.map((item) => (
-                <li
-                  key={item.id}
-                  className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm leading-6"
-                >
+                <li key={item.id} className="rounded-lg border border-border/50 bg-background/80 px-4 py-2.5 text-sm leading-6">
                   <div className="font-medium">{item.statement}</div>
-                  <div className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    {item.kind} · {item.confidence} confidence · {item.supportingRunIds.length} supporting
-                    runs
+                  <div className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {item.kind} · {item.confidence} {t("confidence")} · {item.supportingRunIds.length} {t("supporting runs")}
                   </div>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              No consensus items were extracted for this run.
-            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("No consensus items were extracted for this run.")}</p>
           )}
         </section>
 
-        <section className="rounded-[1.75rem] border border-border/70 bg-card/75 p-5">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-primary" />
-            <h4 className="text-lg font-semibold">Conflicts</h4>
+        {/* Conflicts */}
+        <section className="rounded-lg border border-border/50 bg-card/70 p-5">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-semibold">{t("Conflicts")}</h4>
           </div>
           {props.report.conflicts.length > 0 ? (
-            <div className="mt-4 space-y-4">
+            <div className="mt-3 space-y-3">
               {props.report.conflicts.map((conflict) => (
-                <div
-                  key={conflict.id}
-                  className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4"
-                >
+                <div key={conflict.id} className="breathing-critical rounded-lg border border-border/50 bg-background/80 p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="font-medium">{conflict.title}</div>
-                    <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      {conflict.severity} severity
+                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {conflict.severity} {t("severity")}
                     </span>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    {conflict.summary}
-                  </p>
-                  <div className="mt-3 text-sm font-medium">{conflict.question}</div>
-                  <ul className="mt-3 space-y-3">
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{conflict.summary}</p>
+                  <div className="mt-2 text-sm font-medium">{conflict.question}</div>
+                  <ul className="mt-2 space-y-2">
                     {conflict.positions.map((position) => (
-                      <li
-                        key={`${conflict.id}-${position.modelRunId}`}
-                        className="rounded-2xl border border-border/70 bg-card/75 px-4 py-3 text-sm leading-6"
-                      >
+                      <li key={`${conflict.id}-${position.modelRunId}`} className="rounded-lg border border-border/50 bg-card/60 px-3 py-2.5 text-sm leading-6">
                         <div className="font-medium">{position.label}</div>
-                        <div className="mt-2">{position.stance}</div>
+                        <div className="mt-1">{position.stance}</div>
                         {position.evidence ? (
-                          <div className="mt-2 text-muted-foreground">{position.evidence}</div>
+                          <div className="mt-1 text-muted-foreground">{position.evidence}</div>
                         ) : null}
                       </li>
                     ))}
@@ -742,61 +613,54 @@ function SynthesisReportView(props: { mode: "mock" | "real"; report: SynthesisRe
               ))}
             </div>
           ) : (
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              No cross-model conflicts were detected for this run.
-            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("No cross-model conflicts were detected for this run.")}</p>
           )}
         </section>
 
-        <section className="rounded-[1.75rem] border border-border/70 bg-card/75 p-5">
-          <div className="flex items-center gap-3">
-            <Bot className="h-5 w-5 text-primary" />
-            <h4 className="text-lg font-semibold">Resolution</h4>
+        {/* Resolution */}
+        <section className="rounded-lg border border-border/50 bg-card/70 p-5">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-semibold">{t("Resolution")}</h4>
           </div>
           {props.report.resolution ? (
-            <div className="mt-4 space-y-4">
-              <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+            <div className="mt-3 space-y-3">
+              <div className="rounded-lg border border-border/50 bg-background/80 p-3">
                 <div className="text-sm font-medium">{props.report.resolution.chosenApproach}</div>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {props.report.resolution.rationale}
-                </p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{props.report.resolution.rationale}</p>
               </div>
               {props.report.resolution.openRisks.length > 0 ? (
                 <div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    Open risks
-                  </div>
-                  <div className="mt-3">{renderList(props.report.resolution.openRisks)}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{t("Open risks")}</div>
+                  <div className="mt-2">{renderList(props.report.resolution.openRisks, t)}</div>
                 </div>
               ) : null}
             </div>
           ) : (
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              No final resolution is available because the synthesis did not reach a valid
-              judgeable state.
-            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("No final resolution is available because the synthesis did not reach a valid judgeable state.")}</p>
           )}
         </section>
 
-        <section className="rounded-[1.75rem] border border-border/70 bg-card/75 p-5">
-          <div className="flex items-center gap-3">
-            <Sparkles className="h-5 w-5 text-primary" />
-            <h4 className="text-lg font-semibold">Next actions</h4>
+        {/* Next actions */}
+        <section className="rounded-lg border border-border/50 bg-card/70 p-5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-semibold">{t("Next actions")}</h4>
           </div>
-          <div className="mt-4">{renderList(props.report.nextActions)}</div>
+          <div className="mt-3">{renderList(props.report.nextActions, t)}</div>
         </section>
       </div>
 
-      <section className="rounded-[1.75rem] border border-border/70 bg-card/75 p-5">
-        <div className="flex items-center gap-3">
-          <Bot className="h-5 w-5 text-primary" />
-          <h4 className="text-lg font-semibold">Model runs</h4>
+      {/* Model Runs */}
+      <section className="rounded-lg border border-border/50 bg-card/70 p-5">
+        <div className="flex items-center gap-2">
+          <Bot className="h-4 w-4 text-primary" />
+          <h4 className="text-sm font-semibold">{t("Model runs")}</h4>
         </div>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Expand an individual run to inspect raw output, token usage, latency, validation, and
-          provider-level errors.
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          {t("Expand an individual run to inspect raw output, token usage, latency, validation, and provider-level errors.")}
         </p>
-        <div className="mt-5">
+        <div className="mt-3">
           <ModelRunsAccordion runs={props.report.modelRuns} />
         </div>
       </section>
@@ -804,11 +668,14 @@ function SynthesisReportView(props: { mode: "mock" | "real"; report: SynthesisRe
   );
 }
 
+/* ─────  Main Component  ───── */
+
 type ProgressiveWorkspaceProps = {
   controller?: WorkspaceController;
 };
 
 export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
+  const { t } = useTranslation();
   const controller = props.controller ?? useWorkspaceController();
   const {
     promptDraft,
@@ -845,8 +712,9 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
 
   return (
     <Card className="flex flex-col h-full w-full border-none shadow-none bg-transparent overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto pb-48">
-        <CardContent className="space-y-6 pt-2">
+      <div className="flex-1 overflow-y-auto pb-36">
+        <CardContent className="space-y-4 pt-4">
+          {/* Breadcrumb context bar */}
           <WorkspaceContext
             conversationTitle={selectedConversation?.title ?? null}
             branchName={selectedBranch?.name ?? null}
@@ -868,6 +736,7 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
             unavailableLocalProviders={selectedPresetUnavailableLocalProviders}
           />
 
+          {/* Example Prompts */}
           <div className="flex flex-wrap gap-2">
             {examplePrompts.map((example) => (
               <Button
@@ -878,29 +747,23 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
                 disabled={isBusy}
                 onClick={() => setPromptDraft(example.prompt)}
               >
-                {example.label}
+                {t(example.label)}
               </Button>
             ))}
           </div>
 
+          {/* Error notices */}
           {inputErrorMessage ? (
-            <div className="rounded-[1.5rem] border border-amber-500/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-950">
-              {inputErrorMessage}
-            </div>
+            <div className="rounded-lg border px-4 py-3 text-sm badge-warning">{inputErrorMessage}</div>
           ) : null}
-
           {bootstrapErrorMessage ? (
-            <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-5 py-4 text-sm text-rose-950">
-              {bootstrapErrorMessage}
-            </div>
+            <div className="rounded-lg border px-4 py-3 text-sm badge-error">{bootstrapErrorMessage}</div>
           ) : null}
-
           {runtimeErrorMessage ? (
-            <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-5 py-4 text-sm text-rose-950">
-              {runtimeErrorMessage}
-            </div>
+            <div className="rounded-lg border px-4 py-3 text-sm badge-error">{runtimeErrorMessage}</div>
           ) : null}
 
+          {/* Main content area */}
           {isBootstrapping ? (
             <LoadingWorkspaceState />
           ) : latestSynthesisReport ? (
@@ -913,16 +776,18 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
         </CardContent>
       </div>
 
-      <div className="absolute bottom-0 w-full left-0 right-0 z-10 px-4 pb-4 ptr-events-none bg-gradient-to-t from-surface via-surface/90 to-transparent pt-12">
-        <div className="w-full bg-surface-container-low border-b-2 border-primary shadow-2xl p-4 ptr-events-auto rounded backdrop-blur-xl">
-          <div className="flex items-end gap-4 w-full">
-            <div className="flex-1 flex flex-col gap-1 w-full relative">
-              <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest pl-1">
-                {pendingSubmissionMode === "fork" ? "Fork Branch Next Steps" : "Logic Input Shell"}
+      {/* Floating Input Area */}
+      <div className="absolute bottom-0 w-full left-0 right-0 z-10 px-4 pb-3 pointer-events-none bg-gradient-to-t from-surface via-surface/90 to-transparent pt-10">
+        <div className="w-full bg-surface-container-low/95 backdrop-blur-xl border border-border/40 border-b-2 border-b-primary shadow-xl p-3 pointer-events-auto rounded-lg">
+          <div className="flex items-end gap-3 w-full">
+            <div className="flex-1 flex flex-col gap-1 w-full">
+              <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest pl-0.5">
+                {pendingSubmissionMode === "fork" ? t("Fork Branch Next Steps") : t("Logic Input Shell")}
               </label>
-              <textarea 
-                className="bg-transparent border-none w-full p-1 text-sm focus:ring-0 text-foreground placeholder:text-muted-foreground font-mono resize-none outline-none overflow-y-auto" 
-                placeholder="Refine logic or branch out... Use Cmd/Ctrl+Enter to commit" 
+              <textarea
+                aria-label="Question"
+                className="bg-transparent border-none w-full p-1 text-sm focus:ring-0 text-foreground placeholder:text-muted-foreground font-mono resize-none outline-none overflow-y-auto"
+                placeholder={t("Refine logic or branch out... Use Cmd/Ctrl+Enter to commit") as string}
                 rows={1}
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
@@ -930,30 +795,36 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
                 disabled={isBusy}
               ></textarea>
             </div>
-            
-            <div className="flex gap-2 shrink-0 h-[40px]">
-              {isBootstrapping || isRunning ? (
-                 <Button disabled className="h-full px-4 rounded-none bg-surface-container-high border-none font-bold uppercase text-xs tracking-tight">
-                    <LoaderCircle className="h-4 w-4 animate-spin mr-2" />
-                    Running...
+
+            <div className="flex gap-2 shrink-0 h-[36px]">
+              {isBootstrapping ? (
+                 <Button disabled className="h-full rounded-lg" aria-label="Restoring">
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    <span className="text-xs font-semibold uppercase tracking-tight">{t("Restoring your history")}</span>
+                 </Button>
+              ) : isRunning ? (
+                 <Button disabled className="h-full rounded-lg" aria-label="Running">
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    <span className="text-xs font-semibold uppercase tracking-tight">{t("Running...")}</span>
                  </Button>
               ) : pendingSubmissionMode === "fork" ? (
-                <button 
+                <button
                   disabled={isBusy}
                   onClick={() => void submitPrompt()}
-                  className="bg-surface-container-high text-foreground h-full px-4 flex items-center gap-2 hover:bg-surface-bright transition-all cursor-pointer border-none rounded-sm"
+                  className="bg-surface-container-high text-foreground h-full px-4 flex items-center gap-2 hover:bg-accent transition-colors cursor-pointer border border-border/30 rounded-lg disabled:opacity-50"
                 >
-                  <GitFork className="h-4 w-4 text-primary" />
-                  <span className="text-xs font-bold uppercase tracking-tight hidden sm:inline">Branch Fork</span>
+                  <GitFork className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-semibold uppercase tracking-tight hidden sm:inline">{t("Branch Fork")}</span>
                 </button>
                ) : (
-                <button 
+                <button
                   disabled={isBusy}
                   onClick={() => void submitPrompt()}
-                  className="bg-gradient-to-br from-primary to-primary-container text-primary-foreground h-full px-4 flex items-center gap-2 hover:opacity-90 transition-all cursor-pointer border-none rounded-sm"
+                  className="bg-primary text-primary-foreground h-full px-4 flex items-center gap-2 hover:bg-primary/90 transition-colors cursor-pointer border-none rounded-lg disabled:opacity-50"
+                  aria-label="Analyze question"
                 >
-                  <Play className="h-4 w-4" />
-                  <span className="text-xs font-bold uppercase tracking-tight hidden sm:inline">Commit Context</span>
+                  <Play className="h-3.5 w-3.5" />
+                  <span className="text-xs font-semibold uppercase tracking-tight hidden sm:inline">{t("Commit Context")}</span>
                 </button>
                )}
             </div>

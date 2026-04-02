@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   Activity,
   AlertTriangle,
@@ -11,13 +12,6 @@ import {
 
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   toggleTruthPanel,
   useTruthPanelAutoOpen,
   useTruthPanelState,
@@ -25,220 +19,135 @@ import {
 import type { ModelRun, TraceEvent, ValidationIssue } from "@/schema";
 
 function formatTimestamp(value: string | null) {
-  if (!value) {
-    return "n/a";
-  }
-
+  if (!value) return "n/a";
   return value.replace("T", " · ").replace(".000Z", "Z");
 }
 
 function formatNullableMetric(value: number | null, suffix = "") {
-  if (value === null) {
-    return "n/a";
-  }
-
+  if (value === null) return "n/a";
   return `${value}${suffix}`;
 }
 
-function formatRunStatus(status: ModelRun["status"]) {
-  if (status === "completed") {
-    return "Completed";
-  }
-
-  if (status === "running") {
-    return "Running";
-  }
-
-  if (status === "pending") {
-    return "Pending";
-  }
-
-  return "Failed";
+function formatRunStatus(status: ModelRun["status"], t: (key: string) => string) {
+  if (status === "completed") return t("Completed");
+  if (status === "running") return t("Running");
+  if (status === "pending") return t("Pending");
+  return t("Failed");
 }
 
 function getRunStatusClasses(status: ModelRun["status"]) {
-  if (status === "completed") {
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-900";
-  }
-
-  if (status === "running") {
-    return "border-sky-500/30 bg-sky-500/10 text-sky-900";
-  }
-
-  if (status === "pending") {
-    return "border-border/80 bg-background/80 text-muted-foreground";
-  }
-
-  return "border-rose-500/30 bg-rose-500/10 text-rose-900";
+  if (status === "completed") return "badge-success";
+  if (status === "running") return "badge-info";
+  if (status === "pending") return "badge-neutral";
+  return "badge-error";
 }
 
 function getEventLevelClasses(level: TraceEvent["level"]) {
-  if (level === "info") {
-    return "border-sky-500/30 bg-sky-500/10 text-sky-900";
-  }
-
-  if (level === "warning") {
-    return "border-amber-500/30 bg-amber-500/10 text-amber-900";
-  }
-
-  return "border-rose-500/30 bg-rose-500/10 text-rose-900";
+  if (level === "info") return "badge-info";
+  if (level === "warning") return "badge-warning";
+  return "badge-error";
 }
 
 function formatTokenUsage(run: ModelRun) {
   return [
-    `Input ${formatNullableMetric(run.usage.inputTokens)}`,
-    `Output ${formatNullableMetric(run.usage.outputTokens)}`,
-    `Total ${formatNullableMetric(run.usage.totalTokens)}`,
+    `In ${formatNullableMetric(run.usage.inputTokens)}`,
+    `Out ${formatNullableMetric(run.usage.outputTokens)}`,
+    `Σ ${formatNullableMetric(run.usage.totalTokens)}`,
   ].join(" · ");
 }
 
 function PanelMetric(props: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-        {props.label}
-      </div>
-      <div className="mt-2 text-sm font-medium">{props.value}</div>
+    <div className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{props.label}</div>
+      <div className="mt-1 text-xs font-medium">{props.value}</div>
     </div>
   );
 }
 
 function EmptySection(props: { message: string }) {
   return (
-    <div className="rounded-[1.5rem] border border-dashed border-border/80 bg-background/70 px-4 py-4 text-sm leading-6 text-muted-foreground">
+    <div className="rounded-lg border border-dashed border-border/50 bg-background/70 px-3 py-3 text-xs leading-5 text-muted-foreground italic">
       {props.message}
     </div>
   );
 }
 
 function TruthPanelSummary() {
+  const { t } = useTranslation();
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot) {
-    return <EmptySection message="Run an analysis to see model calls, errors, and validation details." />;
+    return <EmptySection message={t("Run an analysis to see model calls, errors, and validation details.")} />;
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      <PanelMetric
-        label="Total runs"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.totalRuns)}
-      />
-      <PanelMetric
-        label="Completed runs"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.completedRuns)}
-      />
-      <PanelMetric
-        label="Failed runs"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.failedRuns)}
-      />
-      <PanelMetric
-        label="Aggregate input"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateInputTokens)}
-      />
-      <PanelMetric
-        label="Aggregate output"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateOutputTokens)}
-      />
-      <PanelMetric
-        label="Aggregate total"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateTotalTokens)}
-      />
-      <PanelMetric
-        label="Aggregate latency"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateLatencyMs, " ms")}
-      />
-      <PanelMetric
-        label="Max latency"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.maxLatencyMs, " ms")}
-      />
-      <PanelMetric
-        label="Pending runs"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.pendingRuns)}
-      />
-      <PanelMetric
-        label="Running runs"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.runningRuns)}
-      />
-      <PanelMetric
-        label="Updated"
-        value={formatTimestamp(truthPanelSnapshot.generatedAt)}
-      />
-      <PanelMetric label="Report ID" value={truthPanelSnapshot.reportId ?? "n/a"} />
+    <div className="grid gap-2 grid-cols-2">
+      <PanelMetric label={t("Total runs")} value={formatNullableMetric(truthPanelSnapshot.runSummary.totalRuns)} />
+      <PanelMetric label={t("Completed runs")} value={formatNullableMetric(truthPanelSnapshot.runSummary.completedRuns)} />
+      <PanelMetric label={t("Failed runs")} value={formatNullableMetric(truthPanelSnapshot.runSummary.failedRuns)} />
+      <PanelMetric label={t("Aggregate input")} value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateInputTokens)} />
+      <PanelMetric label={t("Aggregate output")} value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateOutputTokens)} />
+      <PanelMetric label={t("Aggregate total")} value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateTotalTokens)} />
+      <PanelMetric label={t("Aggregate latency")} value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateLatencyMs, " ms")} />
+      <PanelMetric label={t("Max latency")} value={formatNullableMetric(truthPanelSnapshot.runSummary.maxLatencyMs, " ms")} />
+      <PanelMetric label={t("Pending runs")} value={formatNullableMetric(truthPanelSnapshot.runSummary.pendingRuns)} />
+      <PanelMetric label={t("Running runs")} value={formatNullableMetric(truthPanelSnapshot.runSummary.runningRuns)} />
     </div>
   );
 }
 
 function CollapsedTruthPanelSummary() {
+  const { t } = useTranslation();
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot) {
-    return (
-      <EmptySection message="Run an analysis to see model calls, errors, and validation details." />
-    );
+    return <EmptySection message={t("Run an analysis to see model calls, errors, and validation details.")} />;
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <PanelMetric
-        label="Total runs"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.totalRuns)}
-      />
-      <PanelMetric
-        label="Failed runs"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.failedRuns)}
-      />
-      <PanelMetric
-        label="Aggregate total"
-        value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateTotalTokens)}
-      />
+    <div className="grid gap-2 grid-cols-3">
+      <PanelMetric label={t("Total runs")} value={formatNullableMetric(truthPanelSnapshot.runSummary.totalRuns)} />
+      <PanelMetric label={t("Failed runs")} value={formatNullableMetric(truthPanelSnapshot.runSummary.failedRuns)} />
+      <PanelMetric label={t("Aggregate total")} value={formatNullableMetric(truthPanelSnapshot.runSummary.aggregateTotalTokens)} />
     </div>
   );
 }
 
 function TruthPanelRunList() {
+  const { t } = useTranslation();
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot) {
-    return <EmptySection message="No model-call details are available yet." />;
+    return <EmptySection message={t("No model-call details are available yet.")} />;
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {truthPanelSnapshot.runs.map((run) => (
-        <section
-          key={run.id}
-          className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-2">
+        <section key={run.id} className="rounded-lg border border-border/50 bg-background/80 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold capitalize">{run.role}</span>
-                <span className="text-sm text-muted-foreground">
-                  {run.provider} / {run.model}
-                </span>
+                <span className="text-xs font-semibold capitalize">{run.role}</span>
+                <span className="text-xs text-muted-foreground">{run.provider} / {run.model}</span>
               </div>
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
                 {formatTokenUsage(run)}
               </div>
             </div>
-            <span
-              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getRunStatusClasses(run.status)}`}
-            >
-              {formatRunStatus(run.status)}
+            <span className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider ${getRunStatusClasses(run.status)}`}>
+              {formatRunStatus(run.status, t)}
             </span>
           </div>
-
-          <div className="mt-4 grid gap-3">
-            <PanelMetric label="Latency" value={formatNullableMetric(run.latencyMs, " ms")} />
-            <PanelMetric label="Validation" value={run.validation.status} />
-            <PanelMetric label="Completed" value={formatTimestamp(run.completedAt)} />
+          <div className="mt-2 grid gap-2">
+            <PanelMetric label={t("Latency")} value={formatNullableMetric(run.latencyMs, " ms")} />
+            <PanelMetric label={t("Validation")} value={run.validation.status} />
           </div>
-
           {run.error ? (
-            <div className="mt-4 rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-950">
-              <div className="font-semibold">Error</div>
-              <p className="mt-2 leading-6">{run.error.message}</p>
+            <div className="mt-2 rounded-lg border px-3 py-2 text-xs badge-error">
+              <div className="font-semibold">{t("Error")}</div>
+              <p className="mt-1 leading-5">{run.error.message}</p>
             </div>
           ) : null}
         </section>
@@ -248,23 +157,22 @@ function TruthPanelRunList() {
 }
 
 function ValidationIssueList() {
+  const { t } = useTranslation();
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot || truthPanelSnapshot.validationIssues.length === 0) {
-    return <EmptySection message="No validation issues were recorded for the latest result." />;
+    return <EmptySection message={t("No validation issues were recorded for the latest result.")} />;
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {truthPanelSnapshot.validationIssues.map((issue: ValidationIssue) => (
         <div
           key={`${issue.runId}-${issue.path.join(".")}-${issue.message}`}
-          className="rounded-[1.5rem] border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-950"
+          className="rounded-lg border px-3 py-2 text-xs badge-warning"
         >
-          <div className="font-semibold">Run {issue.runId}</div>
-          <div className="mt-2 leading-6">
-            {issue.path.join(".")}: {issue.message}
-          </div>
+          <div className="font-semibold">{t("Run")} {issue.runId}</div>
+          <div className="mt-1 leading-5">{issue.path.join(".")}: {issue.message}</div>
         </div>
       ))}
     </div>
@@ -272,31 +180,25 @@ function ValidationIssueList() {
 }
 
 function TraceEventList() {
+  const { t } = useTranslation();
   const { truthPanelSnapshot } = useTruthPanelState();
 
   if (!truthPanelSnapshot || truthPanelSnapshot.events.length === 0) {
-    return <EmptySection message="No activity was recorded for the latest result." />;
+    return <EmptySection message={t("No activity was recorded for the latest result.")} />;
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {truthPanelSnapshot.events.map((event) => (
-        <div
-          key={event.id}
-          className="rounded-[1.5rem] border border-border/70 bg-background/80 px-4 py-3"
-        >
+        <div key={event.id} className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getEventLevelClasses(event.level)}`}
-            >
+            <span className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider ${getEventLevelClasses(event.level)}`}>
               {event.level}
             </span>
-            <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              {event.scope}
-            </span>
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{event.scope}</span>
           </div>
-          <p className="mt-3 text-sm leading-6">{event.message}</p>
-          <div className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="mt-2 text-xs leading-5">{event.message}</p>
+          <div className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
             {formatTimestamp(event.occurredAt)}
           </div>
         </div>
@@ -307,6 +209,7 @@ function TraceEventList() {
 
 export function TruthPanel() {
   useTruthPanelAutoOpen();
+  const { t } = useTranslation();
 
   const {
     isTruthPanelOpen,
@@ -317,107 +220,97 @@ export function TruthPanel() {
 
   const reportStatus = latestSynthesisReport?.status ?? "idle";
   const reportStatusLabel =
-    reportStatus === "idle" ? "Waiting for analysis" : `Latest result ${reportStatus}`;
+    reportStatus === "idle" ? t("Waiting for analysis") : `${t("Latest result")} ${reportStatus}`;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <CardTitle className="flex items-center gap-3">
-              <Activity className="h-5 w-5 text-primary" />
-              Model status
-            </CardTitle>
-            <CardDescription>
-              See which model calls ran, whether any failed, and the latest validation details.
-            </CardDescription>
-          </div>
-          <Button variant="outline" size="sm" onClick={toggleTruthPanel}>
-            {isTruthPanelOpen ? (
-              <>
-                <ChevronUp className="h-4 w-4" />
-                Hide details
-              </>
-            ) : (
-              <>
-                <ChevronDown className="h-4 w-4" />
-                Show details
-              </>
-            )}
-          </Button>
+    <div className="rounded-xl border border-border/60 bg-card">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 p-4 border-b border-border/30">
+        <div className="space-y-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <Activity className="h-4 w-4 text-primary" />
+            {t("Model status")}
+          </h2>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {t("See which model calls ran, whether any failed, and the latest validation details.")}
+          </p>
         </div>
-      </CardHeader>
+        <Button variant="ghost" size="sm" onClick={toggleTruthPanel}>
+          {isTruthPanelOpen ? (
+            <>
+              <ChevronUp className="h-3.5 w-3.5" />
+              <span className="text-xs">{t("Hide details")}</span>
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-3.5 w-3.5" />
+              <span className="text-xs">{t("Show details")}</span>
+            </>
+          )}
+        </Button>
+      </div>
 
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <span className="inline-flex rounded-full border border-border/80 bg-background/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+      {/* Content */}
+      <div className="p-4 space-y-3">
+        <div className="flex flex-wrap gap-1.5">
+          <span className="inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider badge-neutral">
             {reportStatusLabel}
           </span>
           {truthPanelSnapshot ? (
-            <span className="inline-flex rounded-full border border-border/80 bg-background/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Snapshot {formatTimestamp(truthPanelSnapshot.generatedAt)}
+            <span className="inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider badge-neutral">
+              {t("Snapshot")} {formatTimestamp(truthPanelSnapshot.generatedAt)}
             </span>
           ) : null}
         </div>
 
         {runtimeErrorMessage ? (
-          <div className="rounded-[1.5rem] border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-950">
-            <div className="flex items-center gap-2 font-semibold">
-              <ShieldAlert className="h-4 w-4" />
-              Runtime failure
+          <div className="rounded-lg border px-3 py-2 text-xs badge-error">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              {t("Runtime failure")}
             </div>
-            <p className="mt-2 leading-6">{runtimeErrorMessage}</p>
+            <p className="mt-1 leading-5">{runtimeErrorMessage}</p>
           </div>
         ) : null}
 
         {!isTruthPanelOpen ? (
-          <div className="rounded-[1.5rem] border border-border/70 bg-background/75 p-4">
-            <CollapsedTruthPanelSummary />
-          </div>
+          <CollapsedTruthPanelSummary />
         ) : (
-          <div className="space-y-5">
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Waypoints className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Overview
-                </h3>
+          <div className="space-y-4">
+            <section className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Waypoints className="h-3.5 w-3.5 text-primary" />
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("Overview")}</h3>
               </div>
               <TruthPanelSummary />
             </section>
 
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Clock3 className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Model calls
-                </h3>
+            <section className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Clock3 className="h-3.5 w-3.5 text-primary" />
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("Model calls")}</h3>
               </div>
               <TruthPanelRunList />
             </section>
 
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Output issues
-                </h3>
+            <section className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-primary" />
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("Output issues")}</h3>
               </div>
               <ValidationIssueList />
             </section>
 
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Activity log
-                </h3>
+            <section className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("Activity log")}</h3>
               </div>
               <TraceEventList />
             </section>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

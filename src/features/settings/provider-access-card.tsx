@@ -1,14 +1,8 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { KeyRound, LoaderCircle, ShieldCheck, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   getProviderAccessSectionId,
@@ -32,14 +26,8 @@ function buildProviderRecord<TValue>(
 }
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
   return "Unexpected secure store error.";
 }
 
@@ -54,6 +42,7 @@ export function ProviderAccessCard({
   panelError = null,
   onRefresh,
 }: ProviderAccessCardProps) {
+  const { t } = useTranslation();
   const apiKeyStatuses = useAppStore((state) => state.apiKeyStatuses);
   const [inputValues, setInputValues] = useState<Record<SupportedProviderId, string>>(() =>
     buildProviderRecord(() => ""),
@@ -66,43 +55,28 @@ export function ProviderAccessCard({
   >(() => buildProviderRecord(() => null));
 
   const setFeedbackMessage = (provider: SupportedProviderId, message: string | null) => {
-    setFeedbackMessages((current) => ({
-      ...current,
-      [provider]: message,
-    }));
+    setFeedbackMessages((current) => ({ ...current, [provider]: message }));
   };
 
   const setRowAction = (provider: SupportedProviderId, action: ProviderAction) => {
-    setRowActions((current) => ({
-      ...current,
-      [provider]: action,
-    }));
+    setRowActions((current) => ({ ...current, [provider]: action }));
   };
 
   const handleInputChange = (provider: SupportedProviderId, value: string) => {
-    setInputValues((current) => ({
-      ...current,
-      [provider]: value,
-    }));
+    setInputValues((current) => ({ ...current, [provider]: value }));
     setFeedbackMessage(provider, null);
   };
 
   const handleSave = async (provider: CredentialProviderId) => {
     if (!inputValues[provider].trim()) {
-      setFeedbackMessage(provider, "API key is required.");
+      setFeedbackMessage(provider, t("API key is required."));
       return;
     }
-
     setRowAction(provider, "saving");
-
     try {
       await saveApiKey(provider, inputValues[provider]);
-
-      setInputValues((current) => ({
-        ...current,
-        [provider]: "",
-      }));
-      setFeedbackMessage(provider, "API key saved.");
+      setInputValues((current) => ({ ...current, [provider]: "" }));
+      setFeedbackMessage(provider, t("API key saved."));
     } catch (error) {
       setFeedbackMessage(provider, getErrorMessage(error));
     } finally {
@@ -112,15 +86,10 @@ export function ProviderAccessCard({
 
   const handleDelete = async (provider: CredentialProviderId) => {
     setRowAction(provider, "deleting");
-
     try {
       await removeApiKey(provider);
-
-      setInputValues((current) => ({
-        ...current,
-        [provider]: "",
-      }));
-      setFeedbackMessage(provider, "API key removed.");
+      setInputValues((current) => ({ ...current, [provider]: "" }));
+      setFeedbackMessage(provider, t("API key removed."));
     } catch (error) {
       setFeedbackMessage(provider, getErrorMessage(error));
     } finally {
@@ -129,32 +98,29 @@ export function ProviderAccessCard({
   };
 
   return (
-    <Card id={providerAccessCardId} tabIndex={-1}>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-3">
-              <KeyRound className="h-5 w-5 text-primary" />
-              Model providers
-            </CardTitle>
-            <CardDescription className="mt-2">
-              Add hosted-provider API keys or connect local runtimes to switch from demo mode to
-              live model calls. Stored keys stay in the native secure store.
-            </CardDescription>
-          </div>
-
-          {onRefresh ? (
-            <Button variant="outline" size="sm" disabled={isRefreshing} onClick={onRefresh}>
-              {isRefreshing ? "Refreshing..." : "Refresh access"}
-            </Button>
-          ) : null}
+    <div id={providerAccessCardId} tabIndex={-1} className="rounded-xl border border-border/60 bg-card">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 p-4 border-b border-border/30">
+        <div className="space-y-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <KeyRound className="h-4 w-4 text-primary" />
+            {t("Model providers")}
+          </h2>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {t("Add hosted-provider API keys or connect local runtimes to switch from demo mode to live model calls. Stored keys stay in the native secure store.")}
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        {onRefresh ? (
+          <Button variant="ghost" size="sm" disabled={isRefreshing} onClick={onRefresh}>
+            {isRefreshing ? t("Refreshing...") : t("Refresh access")}
+          </Button>
+        ) : null}
+      </div>
+
+      {/* Content */}
+      <div className="p-4 space-y-3">
         {panelError ? (
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
-            {panelError}
-          </div>
+          <div className="rounded-lg border px-3 py-2 text-xs badge-warning">{panelError}</div>
         ) : null}
 
         {providerDefinitions.map((provider) => {
@@ -168,31 +134,26 @@ export function ProviderAccessCard({
             error: null,
           };
           const isBusy = rowActions[provider.id] !== "idle";
+
           const statusLabel = requiresApiKey
-            ? status.configured
-              ? "Ready"
-              : "Missing key"
+            ? status.configured ? t("Ready") : t("Missing key")
             : status.lastCheckedAt === null
-              ? "Not checked"
-              : status.configured
-                ? "Available"
-                : "Unavailable";
+              ? t("Not checked")
+              : status.configured ? t("Available") : t("Unavailable");
+
           const statusClasses = requiresApiKey
-            ? status.configured
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900"
-              : "border-border/80 bg-background/70 text-muted-foreground"
+            ? status.configured ? "badge-success" : "badge-neutral"
             : status.lastCheckedAt === null
-              ? "border-border/80 bg-background/70 text-muted-foreground"
-              : status.configured
-                ? "border-sky-500/30 bg-sky-500/10 text-sky-900"
-                : "border-rose-500/30 bg-rose-500/10 text-rose-900";
+              ? "badge-neutral"
+              : status.configured ? "badge-info" : "badge-error";
+
           const feedback =
             feedbackMessages[provider.id] ??
             status.error ??
             (requiresApiKey
               ? status.lastCheckedAt
                 ? `Checked ${status.lastCheckedAt}`
-                : "No key saved yet."
+                : t("Missing key")
               : status.lastCheckedAt
                 ? status.configured
                   ? `Runtime detected at ${provider.connectionHint?.match(/http:\/\/[^\s]+/u)?.[0] ?? "the local endpoint"}.`
@@ -204,34 +165,29 @@ export function ProviderAccessCard({
               key={provider.id}
               id={getProviderAccessSectionId(provider.id)}
               tabIndex={-1}
-              className="rounded-[1.5rem] border border-border/70 bg-background/75 p-4"
+              className="rounded-lg border border-border/50 bg-background/75 p-3"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-base font-semibold">{provider.label}</h3>
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${statusClasses}`}
-                    >
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold">{provider.label}</h3>
+                    <span className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider ${statusClasses}`}>
                       {statusLabel}
                     </span>
                   </div>
-                  <p className="text-sm leading-6 text-muted-foreground">{provider.description}</p>
+                  <p className="text-xs leading-5 text-muted-foreground">{provider.description}</p>
                 </div>
                 {isRefreshing ? (
-                  <LoaderCircle
-                    className="mt-1 h-4 w-4 animate-spin text-muted-foreground"
-                    aria-label="Refreshing provider statuses"
-                  />
+                  <LoaderCircle className="mt-0.5 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Refreshing provider statuses" />
                 ) : (
-                  <ShieldCheck className="mt-1 h-4 w-4 text-primary" aria-hidden="true" />
+                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />
                 )}
               </div>
 
               {requiresApiKey ? (
-                <div className="mt-4 grid gap-3">
-                  <label className="text-sm font-medium" htmlFor={`api-key-${provider.id}`}>
-                    API key
+                <div className="mt-3 grid gap-2">
+                  <label className="text-xs font-medium" htmlFor={`api-key-${provider.id}`}>
+                    {t("API key")}
                   </label>
                   <Input
                     id={`api-key-${provider.id}`}
@@ -243,38 +199,28 @@ export function ProviderAccessCard({
                     spellCheck={false}
                     disabled={isBusy}
                   />
-
-                  <div className="flex flex-wrap gap-3">
-                    <Button
-                      disabled={isBusy}
-                      onClick={() => void handleSave(credentialProviderId!)}
-                    >
-                      {rowActions[provider.id] === "saving" ? "Saving..." : "Save key"}
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" disabled={isBusy} onClick={() => void handleSave(credentialProviderId!)}>
+                      {rowActions[provider.id] === "saving" ? t("Saving...") : t("Save key")}
                     </Button>
-                    <Button
-                      variant="outline"
-                      disabled={isBusy}
-                      onClick={() => void handleDelete(credentialProviderId!)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      {rowActions[provider.id] === "deleting" ? "Removing..." : "Remove key"}
+                    <Button variant="outline" size="sm" disabled={isBusy} onClick={() => void handleDelete(credentialProviderId!)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {rowActions[provider.id] === "deleting" ? t("Removing...") : t("Remove key")}
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
-                  <p className="text-sm font-medium">Connection</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    {provider.connectionHint}
-                  </p>
+                <div className="mt-3 rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+                  <p className="text-xs font-medium">{t("Connection")}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{provider.connectionHint}</p>
                 </div>
               )}
 
-              <p className="mt-4 text-sm leading-6 text-muted-foreground">{feedback}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{feedback}</p>
             </section>
           );
         })}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
