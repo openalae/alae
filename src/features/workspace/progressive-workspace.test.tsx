@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+import { getProviderAccessSectionId } from "@/features/settings/providers";
 import { createInitialAppStoreState } from "@/store";
 import { appStore } from "@/store/app-store";
 import type { LoadedConversation } from "@/schema";
@@ -297,6 +298,7 @@ function createEmptyConversation(options: {
 
 describe("ProgressiveWorkspace", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     runSynthesisMock.mockReset();
     createReasoningTreeRepositoryMock.mockClear();
     repositoryMock.createConversation.mockReset();
@@ -324,6 +326,16 @@ describe("ProgressiveWorkspace", () => {
             error: null,
           },
           google: {
+            configured: false,
+            lastCheckedAt: "2026-03-18T00:00:00.000Z",
+            error: null,
+          },
+          openrouter: {
+            configured: false,
+            lastCheckedAt: "2026-03-18T00:00:00.000Z",
+            error: null,
+          },
+          ollama: {
             configured: false,
             lastCheckedAt: "2026-03-18T00:00:00.000Z",
             error: null,
@@ -541,6 +553,130 @@ describe("ProgressiveWorkspace", () => {
         expect.objectContaining({
           mockRegistry: expect.any(Object),
         }),
+      );
+    });
+  });
+
+  it("shows which hosted provider is missing for the selected preset", async () => {
+    render(<ProgressiveWorkspace />);
+
+    const presetButton = await screen.findByRole("button", {
+      name: /Cross-vendor Anthropic \+ OpenAI \+ Google/i,
+    });
+    fireEvent.click(presetButton);
+
+    expect(
+      screen.getByText("Cross-vendor is missing required hosted access."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Missing hosted access: Google\. This preset will stay in Demo until those providers are configured\./i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open provider access" })).toBeInTheDocument();
+  });
+
+  it("warns when the selected preset can run live but a local runtime is unavailable", async () => {
+    appStore.setState(
+      createInitialAppStoreState({
+        apiKeyStatuses: {
+          openai: {
+            configured: true,
+            lastCheckedAt: "2026-03-18T00:00:00.000Z",
+            error: null,
+          },
+          anthropic: {
+            configured: true,
+            lastCheckedAt: "2026-03-18T00:00:00.000Z",
+            error: null,
+          },
+          google: {
+            configured: false,
+            lastCheckedAt: "2026-03-18T00:00:00.000Z",
+            error: null,
+          },
+          openrouter: {
+            configured: true,
+            lastCheckedAt: "2026-03-18T00:00:00.000Z",
+            error: null,
+          },
+          ollama: {
+            configured: false,
+            lastCheckedAt: "2026-03-18T00:00:00.000Z",
+            error: "ollama probe failed",
+          },
+        },
+      }),
+    );
+
+    render(<ProgressiveWorkspace />);
+
+    expect(
+      await screen.findByText("Free-first can run live with reduced local coverage."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Optional local runtime unavailable: Ollama\. Live runs can continue, but those local slots may fail and the report may be partial\./i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Last local check: Ollama: ollama probe failed\./i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Keep Ollama running at http:\/\/127\.0\.0\.1:11434\/v1/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View Ollama setup" })).toBeInTheDocument();
+  });
+
+  it("jumps to the matching provider section from the readiness notice", async () => {
+    const providerSection = document.createElement("section");
+    providerSection.id = getProviderAccessSectionId("google");
+    providerSection.tabIndex = -1;
+    const scrollIntoView = vi.fn();
+    const focus = vi.fn();
+    providerSection.scrollIntoView = scrollIntoView;
+    providerSection.focus = focus;
+    document.body.appendChild(providerSection);
+
+    render(<ProgressiveWorkspace />);
+
+    const presetButton = await screen.findByRole("button", {
+      name: /Cross-vendor Anthropic \+ OpenAI \+ Google/i,
+    });
+    fireEvent.click(presetButton);
+    fireEvent.click(screen.getByRole("button", { name: "Open provider access" }));
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "start",
+    });
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores the previously selected preset from local storage", async () => {
+    window.localStorage.setItem("alae.workspace.selectedPresetId", "crossVendorDefault");
+
+    render(<ProgressiveWorkspace />);
+
+    expect(await screen.findByText("Next run: Cross-vendor")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /Cross-vendor Anthropic \+ OpenAI \+ Google/i,
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("persists preset changes for the next session", async () => {
+    render(<ProgressiveWorkspace />);
+
+    const presetButton = await screen.findByRole("button", {
+      name: /Cross-vendor Anthropic \+ OpenAI \+ Google/i,
+    });
+    fireEvent.click(presetButton);
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("alae.workspace.selectedPresetId")).toBe(
+        "crossVendorDefault",
       );
     });
   });

@@ -21,6 +21,12 @@ import {
 import { synthesisPresetDefinitions } from "@/features/consensus";
 import { toggleTruthPanel, useTruthPanelState } from "@/features/truth-panel";
 import {
+  getProviderAccessSectionId,
+  getProviderDefinition,
+  providerAccessCardId,
+  type SupportedProviderId,
+} from "@/features/settings";
+import {
   useWorkspaceController,
   type WorkspaceController,
 } from "@/features/workspace/controller";
@@ -154,6 +160,82 @@ function buildModeNotice(mode: "mock" | "real") {
   };
 }
 
+function joinProviderLabels(providers: Array<{ label: string }>) {
+  return providers.map((provider) => provider.label).join(", ");
+}
+
+function buildPresetReadinessNotice(props: {
+  presetLabel: string;
+  readyProviders: WorkspaceController["selectedPresetReadyProviders"];
+  missingHostedProviders: WorkspaceController["selectedPresetMissingHostedProviders"];
+  unavailableLocalProviders: WorkspaceController["selectedPresetUnavailableLocalProviders"];
+}) {
+  const readyLabels = joinProviderLabels(props.readyProviders);
+  const missingHostedLabels = joinProviderLabels(props.missingHostedProviders);
+  const unavailableLocalLabels = joinProviderLabels(props.unavailableLocalProviders);
+  const localErrorDetails = props.unavailableLocalProviders
+    .filter((provider) => provider.error)
+    .map((provider) => `${provider.label}: ${provider.error}`);
+
+  if (props.missingHostedProviders.length > 0) {
+    return {
+      title: `${props.presetLabel} is missing required hosted access.`,
+      description: [
+        `Missing hosted access: ${missingHostedLabels}. This preset will stay in Demo until those providers are configured.`,
+        props.unavailableLocalProviders.length > 0 ?
+          `Optional local runtime unavailable: ${unavailableLocalLabels}.`
+        : null,
+        localErrorDetails.length > 0 ? `Last local check: ${localErrorDetails.join(" · ")}.` : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      classes: "border-amber-500/25 bg-amber-500/10 text-amber-950",
+    };
+  }
+
+  if (props.unavailableLocalProviders.length > 0) {
+    return {
+      title: `${props.presetLabel} can run live with reduced local coverage.`,
+      description: [
+        readyLabels ? `Hosted access is ready for ${readyLabels}.` : "Hosted access is ready.",
+        `Optional local runtime unavailable: ${unavailableLocalLabels}. Live runs can continue, but those local slots may fail and the report may be partial.`,
+        localErrorDetails.length > 0 ? `Last local check: ${localErrorDetails.join(" · ")}.` : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      classes: "border-sky-500/25 bg-sky-500/10 text-sky-950",
+    };
+  }
+
+  return {
+    title: `${props.presetLabel} is ready for live runs.`,
+    description:
+      readyLabels.length > 0 ?
+        `Available providers for the next run: ${readyLabels}.`
+      : "All required providers are configured for the next run.",
+    classes: "border-emerald-500/25 bg-emerald-500/10 text-emerald-950",
+  };
+}
+
+function focusProviderAccess(providerId?: SupportedProviderId) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const targetId = providerId ? getProviderAccessSectionId(providerId) : providerAccessCardId;
+  const target = document.getElementById(targetId);
+
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  target.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+  target.focus();
+}
+
 function renderList(items: string[]) {
   if (items.length === 0) {
     return <p className="text-sm leading-6 text-muted-foreground">No items yet.</p>;
@@ -215,6 +297,60 @@ function PresetPicker(props: {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function PresetReadinessNotice(props: {
+  presetLabel: string;
+  readyProviders: WorkspaceController["selectedPresetReadyProviders"];
+  missingHostedProviders: WorkspaceController["selectedPresetMissingHostedProviders"];
+  unavailableLocalProviders: WorkspaceController["selectedPresetUnavailableLocalProviders"];
+}) {
+  const notice = buildPresetReadinessNotice(props);
+  const firstMissingHostedProvider = props.missingHostedProviders[0] ?? null;
+  const firstUnavailableLocalProvider = props.unavailableLocalProviders[0] ?? null;
+  const localSetupHint =
+    firstUnavailableLocalProvider ?
+      getProviderDefinition(firstUnavailableLocalProvider.id).connectionHint ?? null
+    : null;
+
+  return (
+    <section className={`rounded-[1.75rem] border px-5 py-4 ${notice.classes}`}>
+      <div className="text-xs uppercase tracking-[0.18em]">Next run status</div>
+      <div className="mt-2 text-sm font-semibold">{notice.title}</div>
+      <p className="mt-2 text-sm leading-6">{notice.description}</p>
+
+      {localSetupHint ? (
+        <div className="mt-4 rounded-2xl border border-current/15 bg-background/50 px-4 py-3 text-sm leading-6">
+          {localSetupHint}
+        </div>
+      ) : null}
+
+      {firstMissingHostedProvider || firstUnavailableLocalProvider ? (
+        <div className="mt-4 flex flex-wrap gap-3">
+          {firstMissingHostedProvider ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => focusProviderAccess(firstMissingHostedProvider.id)}
+            >
+              Open provider access
+            </Button>
+          ) : null}
+          {firstUnavailableLocalProvider ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => focusProviderAccess(firstUnavailableLocalProvider.id)}
+            >
+              View {firstUnavailableLocalProvider.label} setup
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -739,6 +875,9 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
     displayMode,
     selectedPresetId,
     selectedPresetDefinition,
+    selectedPresetReadyProviders,
+    selectedPresetMissingHostedProviders,
+    selectedPresetUnavailableLocalProviders,
     setSelectedPresetId,
     selectedConversation,
     selectedBranch,
@@ -803,6 +942,13 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
           selectedPresetId={selectedPresetId}
           onSelectPresetId={setSelectedPresetId}
           isBusy={isBusy}
+        />
+
+        <PresetReadinessNotice
+          presetLabel={selectedPresetDefinition.label}
+          readyProviders={selectedPresetReadyProviders}
+          missingHostedProviders={selectedPresetMissingHostedProviders}
+          unavailableLocalProviders={selectedPresetUnavailableLocalProviders}
         />
 
         <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">

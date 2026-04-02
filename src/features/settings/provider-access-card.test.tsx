@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+import {
+  getProviderAccessSectionId,
+  providerAccessCardId,
+} from "@/features/settings/providers";
 import { createInitialAppStoreState } from "@/store";
 import { appStore } from "@/store/app-store";
 
@@ -57,6 +61,7 @@ describe("ProviderAccessCard", () => {
     render(<ProviderAccessCard />);
 
     expect(screen.getByRole("heading", { name: "Model providers" })).toBeInTheDocument();
+    expect(document.getElementById(providerAccessCardId)).toBeInTheDocument();
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
     expect(screen.getByText("Google")).toBeInTheDocument();
@@ -126,6 +131,8 @@ describe("ProviderAccessCard", () => {
   it("renders local-only providers without API key controls", () => {
     render(<ProviderAccessCard />);
 
+    expect(document.getElementById(getProviderAccessSectionId("openai"))).toBeInTheDocument();
+    expect(document.getElementById(getProviderAccessSectionId("ollama"))).toBeInTheDocument();
     expect(
       screen.getAllByText(/Keep Ollama running at http:\/\/127\.0\.0\.1:11434\/v1/i),
     ).toHaveLength(1);

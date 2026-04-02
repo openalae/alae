@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  getProviderAccessSectionId,
+  providerAccessCardId,
   providerDefinitions,
   providerRequiresApiKey,
   type CredentialProviderId,
@@ -127,7 +129,7 @@ export function ProviderAccessCard({
   };
 
   return (
-    <Card>
+    <Card id={providerAccessCardId} tabIndex={-1}>
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -200,6 +202,8 @@ export function ProviderAccessCard({
           return (
             <section
               key={provider.id}
+              id={getProviderAccessSectionId(provider.id)}
+              tabIndex={-1}
               className="rounded-[1.5rem] border border-border/70 bg-background/75 p-4"
             >
               <div className="flex items-start justify-between gap-3">

@@ -16,12 +16,20 @@ import {
   type ReasoningTreeRepository,
 } from "@/features/reasoning-tree";
 import {
+  readStoredWorkspacePresetId,
+  writeStoredWorkspacePresetId,
+} from "@/features/workspace/preset-preferences";
+import {
   selectLatestSynthesisReport,
   useAppStore,
   type ApiKeyStatus,
 } from "@/store";
 import { appStore } from "@/store/app-store";
-import { providerRequiresApiKey } from "@/features/settings";
+import {
+  getProviderDefinition,
+  providerRequiresApiKey,
+  type SupportedProviderId,
+} from "@/features/settings";
 import type {
   Conversation,
   ConversationBranch,
@@ -39,6 +47,18 @@ type WorkspaceHydrationOptions = {
   branchId?: string | null;
   nodeId?: string | null;
   preserveExistingResult?: boolean;
+};
+
+type WorkspacePresetProviderStatus = {
+  id: SupportedProviderId;
+  label: string;
+  error: string | null;
+};
+
+type WorkspacePresetReadiness = {
+  readyProviders: WorkspacePresetProviderStatus[];
+  missingHostedProviders: WorkspacePresetProviderStatus[];
+  unavailableLocalProviders: WorkspacePresetProviderStatus[];
 };
 
 type RunWorkspaceSynthesisOptions = {
@@ -262,6 +282,40 @@ export function resolveWorkspaceRunMode(
   return "real";
 }
 
+function getWorkspacePresetReadiness(
+  apiKeyStatuses: ApiKeyStatuses,
+  preset: SynthesisPreset,
+): WorkspacePresetReadiness {
+  const providerIds = [...new Set(preset.slots.map((slot) => slot.provider))];
+
+  return providerIds.reduce<WorkspacePresetReadiness>(
+    (readiness, providerId) => {
+      const definition = getProviderDefinition(providerId);
+      const providerStatus = apiKeyStatuses[providerId];
+      const descriptor = {
+        id: providerId,
+        label: definition.label,
+        error: providerStatus?.error ?? null,
+      } satisfies WorkspacePresetProviderStatus;
+
+      if (providerStatus?.configured) {
+        readiness.readyProviders.push(descriptor);
+      } else if (providerRequiresApiKey(providerId)) {
+        readiness.missingHostedProviders.push(descriptor);
+      } else {
+        readiness.unavailableLocalProviders.push(descriptor);
+      }
+
+      return readiness;
+    },
+    {
+      readyProviders: [],
+      missingHostedProviders: [],
+      unavailableLocalProviders: [],
+    },
+  );
+}
+
 export async function runWorkspaceSynthesis(
   prompt: string,
   options: RunWorkspaceSynthesisOptions = {},
@@ -320,10 +374,11 @@ export function useWorkspaceController() {
   const [bootstrapStatus, setBootstrapStatus] = useState<WorkspaceBootstrapStatus>("loading");
   const [lastExecutionMode, setLastExecutionMode] = useState<SynthesisMode | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<SynthesisPresetId>(
-    defaultWorkspacePresetId,
+    () => readStoredWorkspacePresetId() ?? defaultWorkspacePresetId,
   );
   const selectedPreset = getSynthesisPreset(selectedPresetId);
   const selectedPresetDefinition = getSynthesisPresetDefinition(selectedPresetId);
+  const selectedPresetReadiness = getWorkspacePresetReadiness(apiKeyStatuses, selectedPreset);
   const effectiveMode = resolveWorkspaceRunMode(apiKeyStatuses, selectedPreset);
   const displayMode = latestSynthesisReport ? (lastExecutionMode ?? effectiveMode) : effectiveMode;
   const isRunning = runStatus === "running";
@@ -524,6 +579,10 @@ export function useWorkspaceController() {
     };
   }, [repository]);
 
+  useEffect(() => {
+    writeStoredWorkspacePresetId(selectedPresetId);
+  }, [selectedPresetId]);
+
   const submitPrompt = async () => {
     const trimmedPrompt = promptDraft.trim();
 
@@ -624,6 +683,9 @@ export function useWorkspaceController() {
     selectedPresetId,
     selectedPreset,
     selectedPresetDefinition,
+    selectedPresetReadyProviders: selectedPresetReadiness.readyProviders,
+    selectedPresetMissingHostedProviders: selectedPresetReadiness.missingHostedProviders,
+    selectedPresetUnavailableLocalProviders: selectedPresetReadiness.unavailableLocalProviders,
     setSelectedPresetId,
     conversationSummaries,
     loadedConversation,

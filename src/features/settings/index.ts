@@ -8,7 +8,9 @@ export {
 } from "@/features/settings/api-key-bridge";
 export {
   credentialProviderIds,
+  getProviderAccessSectionId,
   getProviderDefinition,
+  providerAccessCardId,
   providerDefinitions,
   providerRequiresApiKey,
   supportedProviderIds,

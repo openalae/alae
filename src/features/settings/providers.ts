@@ -67,8 +67,14 @@ const providerDefinitionMap = Object.fromEntries(
 
 const credentialProviderIdSet = new Set<SupportedProviderId>(credentialProviderIds);
 
+export const providerAccessCardId = "provider-access-card";
+
 export function getProviderDefinition(providerId: SupportedProviderId): ProviderDefinition {
   return providerDefinitionMap[providerId];
+}
+
+export function getProviderAccessSectionId(providerId: SupportedProviderId) {
+  return `provider-access-${providerId}`;
 }
 
 export function providerRequiresApiKey(
