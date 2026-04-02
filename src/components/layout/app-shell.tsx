@@ -307,7 +307,7 @@ export function AppShell() {
         <button
           onClick={toggleRightPanel}
           className="z-10 flex w-6 shrink-0 items-center justify-center border-l border-border/30 bg-surface-container-low text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          title={isRightPanelOpen ? t("Hide details") as string : t("Inspector") as string}
+          title={isRightPanelOpen ? t("Collapse panel") as string : t("Inspector") as string}
         >
           {isRightPanelOpen ? (
             <ChevronRight className="h-3.5 w-3.5" />

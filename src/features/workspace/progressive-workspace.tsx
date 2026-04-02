@@ -470,14 +470,14 @@ function ModelRunsAccordion(props: { runs: ModelRun[] }) {
             key={run.id}
             className={`rounded-lg transition-colors border border-border/30 ${isOpen ? 'bg-surface-container-high' : 'bg-surface-container-low hover:bg-surface-container-high cursor-pointer'}`}
           >
-            <div className={`p-3 flex items-center justify-between ${isOpen ? 'border-b border-border/20' : ''}`} onClick={() => setOpenRunId(openRunId === run.id ? null : run.id)}>
+            <button type="button" className={`w-full p-3 flex items-center justify-between text-left ${isOpen ? 'border-b border-border/20' : ''}`} onClick={() => setOpenRunId(openRunId === run.id ? null : run.id)}>
               <div className="flex w-full min-w-0 items-center gap-3">
                 <div className={`text-sm font-bold flex items-center justify-center w-7 h-7 rounded-md shrink-0 ${colorClass} bg-background border border-border/30`}>
                     {run.role.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className={`text-xs font-semibold truncate ${isOpen ? 'text-primary' : 'text-foreground'}`}>
-                    {run.provider} / {run.model}
+                    {run.role} {run.provider} / {run.model}
                   </div>
                   <div className="text-[10px] font-mono text-muted-foreground uppercase truncate mt-0.5">
                     {formatRunStatus(run.status, t)} · {formatTokenUsage(run)} · {run.latencyMs ?? 0}ms
@@ -485,7 +485,7 @@ function ModelRunsAccordion(props: { runs: ModelRun[] }) {
                 </div>
                 <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${isOpen ? 'text-primary rotate-180' : 'text-muted-foreground'}`} />
               </div>
-            </div>
+            </button>
 
             {isOpen ? (
               <div className="p-3 bg-surface-container-lowest/50 text-xs text-on-surface-variant leading-relaxed font-mono whitespace-pre-wrap overflow-x-auto">
