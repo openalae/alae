@@ -6,5 +6,14 @@ export {
   saveApiKey,
   secureStoreUnavailableMessage,
 } from "@/features/settings/api-key-bridge";
-export { providerDefinitions, supportedProviderIds } from "@/features/settings/providers";
-export type { SupportedProviderId } from "@/features/settings/providers";
+export {
+  credentialProviderIds,
+  getProviderDefinition,
+  providerDefinitions,
+  providerRequiresApiKey,
+  supportedProviderIds,
+} from "@/features/settings/providers";
+export type {
+  CredentialProviderId,
+  SupportedProviderId,
+} from "@/features/settings/providers";

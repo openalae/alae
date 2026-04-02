@@ -5,6 +5,7 @@ Alae is a local-first AI reasoning workstation built with Tauri 2, Rust, React, 
 ## Status
 
 - Phase 1 MVP is implemented locally: the current baseline includes the progressive synthesis workspace, truth panel, secure desktop API key bridge, local reasoning tree persistence, and end-to-end wiring across the desktop shell.
+- Live model access now supports OpenAI, Anthropic, Google, OpenRouter, and local Ollama. The desktop workspace defaults to a free-first preset that uses OpenRouter plus optional local Ollama models.
 - Frontend tests, Rust tests, and the production frontend build are all passing in the current repository state.
 - The next planning pass should begin with the first Phase 2 module.
 - The working PRD stays local and is intentionally not committed. The repository tracks the engineering-facing MVP breakdown in `docs/phase-1-mvp.md`.
@@ -26,6 +27,12 @@ npm run tauri dev
 ```
 
 The first `npm run tauri dev` will fetch and compile Rust crates for the Tauri shell.
+
+## Live Providers
+
+- Hosted keys: OpenAI, Anthropic, Google, and OpenRouter keys can be added from the desktop settings panel and are stored in the native secure store.
+- Local runtime: Ollama does not require an API key. Run Ollama locally at `http://127.0.0.1:11434/v1` and pull the models you want to use.
+- Default preset: the desktop workspace currently defaults to a free-first preset built around `openrouter/free` plus local Ollama candidates.
 
 ## Useful Scripts
 

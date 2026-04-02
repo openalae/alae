@@ -36,6 +36,7 @@ import type {
   SynthesisModelSlot,
 } from "@/features/consensus/types";
 import { readApiKey } from "@/features/settings/api-key-bridge";
+import { providerRequiresApiKey } from "@/features/settings/providers";
 import {
   CandidateModelOutputSchema,
   JudgeModelOutputSchema,
@@ -247,6 +248,15 @@ async function resolveModelForSlot(
     return { kind: "model", model: mockModel };
   }
 
+  const providerFactory = getProviderFactory(slot.provider, options.realRegistry);
+
+  if (!providerRequiresApiKey(slot.provider)) {
+    return {
+      kind: "model",
+      model: providerFactory(slot.modelId, ""),
+    };
+  }
+
   try {
     const apiKey = await (options.readApiKey ?? readApiKey)(slot.provider);
 
@@ -259,7 +269,6 @@ async function resolveModelForSlot(
       };
     }
 
-    const providerFactory = getProviderFactory(slot.provider, options.realRegistry);
     return { kind: "model", model: providerFactory(slot.modelId, apiKey) };
   } catch (error) {
     return {

@@ -38,6 +38,11 @@ describe("ProviderAccessCard", () => {
             lastCheckedAt: "2026-03-17T00:00:00.000Z",
             error: null,
           },
+          openrouter: {
+            configured: false,
+            lastCheckedAt: "2026-03-17T00:00:00.000Z",
+            error: null,
+          },
         },
       }),
     );
@@ -50,14 +55,17 @@ describe("ProviderAccessCard", () => {
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
     expect(screen.getByText("Google")).toBeInTheDocument();
+    expect(screen.getByText("OpenRouter")).toBeInTheDocument();
+    expect(screen.getByText("Ollama")).toBeInTheDocument();
     expect(screen.getByText("Ready")).toBeInTheDocument();
+    expect(screen.getByText("Local runtime")).toBeInTheDocument();
   });
 
   it("renders panel-level refresh state from the shell", () => {
     render(<ProviderAccessCard isRefreshing panelError="native refresh failed" />);
 
     expect(screen.getByText("native refresh failed")).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Refreshing provider statuses")).toHaveLength(3);
+    expect(screen.getAllByLabelText("Refreshing provider statuses")).toHaveLength(5);
   });
 
   it("blocks empty save submissions", async () => {
@@ -108,5 +116,14 @@ describe("ProviderAccessCard", () => {
       expect(removeApiKeyMock).toHaveBeenCalledWith("openai");
     });
     expect(screen.getByText("API key removed.")).toBeInTheDocument();
+  });
+
+  it("renders local-only providers without API key controls", () => {
+    render(<ProviderAccessCard />);
+
+    expect(
+      screen.getAllByText(/Keep Ollama running at http:\/\/127\.0\.0\.1:11434\/v1/i),
+    ).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Save key" })).toHaveLength(4);
   });
 });

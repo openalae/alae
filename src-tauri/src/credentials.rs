@@ -13,23 +13,25 @@ const EMPTY_KEY_ERROR: &str = "API key cannot be empty.";
 const UNSUPPORTED_RUNTIME_ERROR: &str =
     "Secure credential storage is only supported on macOS and Windows in Phase 1.";
 const UNKNOWN_PROVIDER_ERROR: &str =
-    "Unsupported provider. Expected one of: openai, anthropic, google.";
+    "Unsupported provider. Expected one of: openai, anthropic, google, openrouter.";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum SupportedProvider {
     OpenAi,
     Anthropic,
     Google,
+    OpenRouter,
 }
 
 impl SupportedProvider {
-    const ALL: [Self; 3] = [Self::OpenAi, Self::Anthropic, Self::Google];
+    const ALL: [Self; 4] = [Self::OpenAi, Self::Anthropic, Self::Google, Self::OpenRouter];
 
     fn as_str(self) -> &'static str {
         match self {
             Self::OpenAi => "openai",
             Self::Anthropic => "anthropic",
             Self::Google => "google",
+            Self::OpenRouter => "openrouter",
         }
     }
 }
@@ -42,6 +44,7 @@ impl TryFrom<&str> for SupportedProvider {
             "openai" => Ok(Self::OpenAi),
             "anthropic" => Ok(Self::Anthropic),
             "google" => Ok(Self::Google),
+            "openrouter" => Ok(Self::OpenRouter),
             _ => Err(UNKNOWN_PROVIDER_ERROR.to_string()),
         }
     }
@@ -336,12 +339,14 @@ mod tests {
 
         set_api_key_with_store(&store, "openai", "sk-openai").unwrap();
         set_api_key_with_store(&store, "google", "sk-google").unwrap();
+        set_api_key_with_store(&store, "openrouter", "sk-openrouter").unwrap();
 
         let statuses = get_api_key_statuses_with_store(&store).unwrap();
 
         assert_eq!(statuses.get("openai"), Some(&true));
         assert_eq!(statuses.get("anthropic"), Some(&false));
         assert_eq!(statuses.get("google"), Some(&true));
+        assert_eq!(statuses.get("openrouter"), Some(&true));
     }
 
     #[test]

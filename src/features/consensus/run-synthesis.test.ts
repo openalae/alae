@@ -582,6 +582,58 @@ describe("runSynthesis orchestration", () => {
     expect(failedRun?.error?.code).toBe("SCHEMA_VALIDATION_FAILED");
   });
 
+  it("does not request API keys for local Ollama slots in the free preset", async () => {
+    const readProviders: SupportedProviderId[] = [];
+    let openRouterCallCount = 0;
+
+    const result = await runSynthesis(
+      {
+        prompt,
+        mode: "real",
+        presetId: "freeDefault",
+      },
+      {
+        generateId: createIdGenerator(),
+        currentDate: createClock(),
+        realRegistry: {
+          openrouter: (modelId) => {
+            openRouterCallCount += 1;
+
+            return createMockModel({
+              provider: "openrouter",
+              modelId,
+              object:
+                openRouterCallCount === 1
+                  ? strongCandidate
+                  : {
+                      outputType: "judge",
+                      summary: "Use the free hosted router as the judge.",
+                      chosenApproach: "Mix OpenRouter with local Ollama candidates.",
+                      rationale: "This keeps hosted usage minimal while preserving a judge pass.",
+                      resolvedConflictIds: [],
+                      openRisks: ["Local Ollama availability still depends on the desktop runtime."],
+                    },
+            });
+          },
+          ollama: (modelId) =>
+            createMockModel({
+              provider: "ollama",
+              modelId,
+              object: modelId === "qwen3:8b" ? fastCandidateOne : fastCandidateTwo,
+            }),
+        },
+        readApiKey: async (provider: SupportedProviderId) => {
+          readProviders.push(provider);
+          return provider === "openrouter" ? "test-key-openrouter" : null;
+        },
+      },
+    );
+
+    expect(result.report.status).toBe("ready");
+    expect(readProviders).toEqual(["openrouter", "openrouter"]);
+    expect(result.report.modelRuns.some((run) => run.provider === "ollama")).toBe(true);
+  });
+
   it("returns failed when all candidate runs fail", async () => {
     const result = await runSynthesis(
       {

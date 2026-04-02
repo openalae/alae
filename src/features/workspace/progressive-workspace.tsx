@@ -140,7 +140,7 @@ function buildModeNotice(mode: "mock" | "real") {
     return {
       title: "Live model mode is ready.",
       description:
-        "This run will call real models because all required provider keys are configured.",
+        "This run will call real models because the required hosted providers are configured. Local providers such as Ollama do not need keys.",
       classes: "border-emerald-500/25 bg-emerald-500/10 text-emerald-950",
     };
   }
@@ -148,7 +148,7 @@ function buildModeNotice(mode: "mock" | "real") {
   return {
     title: "Demo mode is on.",
     description:
-      "This run will use built-in sample responses until you add keys for OpenAI, Anthropic, and Google.",
+      "This run will use built-in sample responses until you configure the hosted providers required by the active preset. The default free preset uses OpenRouter plus optional local Ollama models.",
     classes: "border-amber-500/25 bg-amber-500/10 text-amber-950",
   };
 }

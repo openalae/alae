@@ -37,6 +37,7 @@ describe("api-key-bridge", () => {
       openai: true,
       anthropic: false,
       google: true,
+      openrouter: false,
     });
 
     await refreshApiKeyStatuses();
@@ -44,6 +45,8 @@ describe("api-key-bridge", () => {
     expect(appStore.getState().apiKeyStatuses.openai?.configured).toBe(true);
     expect(appStore.getState().apiKeyStatuses.anthropic?.configured).toBe(false);
     expect(appStore.getState().apiKeyStatuses.google?.configured).toBe(true);
+    expect(appStore.getState().apiKeyStatuses.openrouter?.configured).toBe(false);
+    expect(appStore.getState().apiKeyStatuses.ollama?.configured).toBe(true);
   });
 
   it("preserves previous configuration flags when refresh fails", async () => {
@@ -59,6 +62,8 @@ describe("api-key-bridge", () => {
     expect(appStore.getState().apiKeyStatuses.openai?.configured).toBe(true);
     expect(appStore.getState().apiKeyStatuses.openai?.error).toBe("native failure");
     expect(appStore.getState().apiKeyStatuses.google?.configured).toBe(false);
+    expect(appStore.getState().apiKeyStatuses.ollama?.configured).toBe(true);
+    expect(appStore.getState().apiKeyStatuses.ollama?.error).toBeNull();
   });
 
   it("stores configuration status without persisting raw keys", async () => {
@@ -101,5 +106,20 @@ describe("api-key-bridge", () => {
 
     expect(key).toBe("sk-anthropic");
     expect(JSON.stringify(appStore.getState())).not.toContain("sk-anthropic");
+  });
+
+  it("stores OpenRouter status alongside the original hosted providers", async () => {
+    invokeMock.mockResolvedValue({
+      provider: "openrouter",
+      configured: true,
+    });
+
+    await saveApiKey("openrouter", " sk-or-v1-test ");
+
+    expect(invokeMock).toHaveBeenCalledWith("set_api_key", {
+      provider: "openrouter",
+      key: "sk-or-v1-test",
+    });
+    expect(appStore.getState().apiKeyStatuses.openrouter?.configured).toBe(true);
   });
 });

@@ -1,7 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { SupportedProviderIdSchema, ApiKeyInputSchema, ApiKeyMutationResultSchema, ApiKeyStatusesSchema, ApiKeyValueSchema } from "@/features/settings/contracts";
-import { supportedProviderIds, type SupportedProviderId } from "@/features/settings/providers";
+import {
+  CredentialProviderIdSchema,
+  ApiKeyInputSchema,
+  ApiKeyMutationResultSchema,
+  ApiKeyStatusesSchema,
+  ApiKeyValueSchema,
+} from "@/features/settings/contracts";
+import {
+  providerDefinitions,
+  providerRequiresApiKey,
+  type CredentialProviderId,
+  type SupportedProviderId,
+} from "@/features/settings/providers";
 import { appStore } from "@/store/app-store";
 import type { ApiKeyStatus } from "@/store";
 
@@ -31,7 +42,7 @@ function toErrorMessage(error: unknown) {
 function getStoredStatus(provider: SupportedProviderId): ApiKeyStatus {
   return (
     appStore.getState().apiKeyStatuses[provider] ?? {
-      configured: false,
+      configured: !providerRequiresApiKey(provider),
       lastCheckedAt: null,
       error: null,
     }
@@ -39,17 +50,19 @@ function getStoredStatus(provider: SupportedProviderId): ApiKeyStatus {
 }
 
 function buildStatusMap(
-  configuredMap: Record<SupportedProviderId, boolean>,
+  configuredMap: Partial<Record<CredentialProviderId, boolean>>,
   lastCheckedAt: string,
   error: string | null = null,
 ): Record<SupportedProviderId, ApiKeyStatus> {
   return Object.fromEntries(
-    supportedProviderIds.map((provider) => [
-      provider,
+    providerDefinitions.map((provider) => [
+      provider.id,
       {
-        configured: configuredMap[provider],
+        configured: providerRequiresApiKey(provider.id)
+          ? configuredMap[provider.id] ?? false
+          : true,
         lastCheckedAt,
-        error,
+        error: providerRequiresApiKey(provider.id) ? error : null,
       },
     ]),
   ) as Record<SupportedProviderId, ApiKeyStatus>;
@@ -57,12 +70,14 @@ function buildStatusMap(
 
 function buildFailureStatusMap(lastCheckedAt: string, error: string) {
   return Object.fromEntries(
-    supportedProviderIds.map((provider) => [
-      provider,
+    providerDefinitions.map((provider) => [
+      provider.id,
       {
-        configured: getStoredStatus(provider).configured,
+        configured: providerRequiresApiKey(provider.id)
+          ? getStoredStatus(provider.id).configured
+          : true,
         lastCheckedAt,
-        error,
+        error: providerRequiresApiKey(provider.id) ? error : null,
       },
     ]),
   ) as Record<SupportedProviderId, ApiKeyStatus>;
@@ -84,6 +99,7 @@ export async function refreshApiKeyStatuses(): Promise<void> {
           openai: false,
           anthropic: false,
           google: false,
+          openrouter: false,
         },
         lastCheckedAt,
       ),
@@ -97,9 +113,10 @@ export async function refreshApiKeyStatuses(): Promise<void> {
     appStore.getState().setApiKeyStatuses(
       buildStatusMap(
         {
-          openai: result.openai,
-          anthropic: result.anthropic,
-          google: result.google,
+          openai: result.openai ?? false,
+          anthropic: result.anthropic ?? false,
+          google: result.google ?? false,
+          openrouter: result.openrouter ?? false,
         },
         lastCheckedAt,
       ),
@@ -111,8 +128,8 @@ export async function refreshApiKeyStatuses(): Promise<void> {
   }
 }
 
-export async function saveApiKey(provider: SupportedProviderId, key: string): Promise<void> {
-  const validatedProvider = SupportedProviderIdSchema.parse(provider);
+export async function saveApiKey(provider: CredentialProviderId, key: string): Promise<void> {
+  const validatedProvider = CredentialProviderIdSchema.parse(provider);
   const validatedKey = ApiKeyInputSchema.parse(key);
   const lastCheckedAt = getTimestamp();
 
@@ -145,8 +162,8 @@ export async function saveApiKey(provider: SupportedProviderId, key: string): Pr
   }
 }
 
-export async function removeApiKey(provider: SupportedProviderId): Promise<void> {
-  const validatedProvider = SupportedProviderIdSchema.parse(provider);
+export async function removeApiKey(provider: CredentialProviderId): Promise<void> {
+  const validatedProvider = CredentialProviderIdSchema.parse(provider);
   const lastCheckedAt = getTimestamp();
 
   try {
@@ -177,8 +194,8 @@ export async function removeApiKey(provider: SupportedProviderId): Promise<void>
   }
 }
 
-export async function readApiKey(provider: SupportedProviderId): Promise<string | null> {
-  const validatedProvider = SupportedProviderIdSchema.parse(provider);
+export async function readApiKey(provider: CredentialProviderId): Promise<string | null> {
+  const validatedProvider = CredentialProviderIdSchema.parse(provider);
   ensureRuntime();
 
   const result = ApiKeyValueSchema.parse(

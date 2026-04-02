@@ -98,9 +98,7 @@ describe("workspace controller helpers", () => {
   it("selects real mode when all preset providers are configured", () => {
     expect(
       resolveWorkspaceRunMode({
-        openai: configuredStatus,
-        anthropic: configuredStatus,
-        google: configuredStatus,
+        openrouter: configuredStatus,
       }),
     ).toBe("real");
   });
@@ -108,9 +106,7 @@ describe("workspace controller helpers", () => {
   it("falls back to mock mode when any required provider is missing", () => {
     expect(
       resolveWorkspaceRunMode({
-        openai: configuredStatus,
-        anthropic: configuredStatus,
-        google: missingStatus,
+        openrouter: missingStatus,
       }),
     ).toBe("mock");
   });
@@ -126,21 +122,19 @@ describe("workspace controller helpers", () => {
 
     const result = await runWorkspaceSynthesis("Draft module 7", {
       apiKeyStatuses: {
-        openai: configuredStatus,
-        anthropic: missingStatus,
-        google: configuredStatus,
+        openrouter: missingStatus,
       },
       runSynthesisImpl,
       createMockRegistry,
     });
 
     expect(result.effectiveMode).toBe("mock");
-    expect(createMockRegistry).toHaveBeenCalledWith("crossVendorDefault");
+    expect(createMockRegistry).toHaveBeenCalledWith("freeDefault");
     expect(runSynthesisImpl).toHaveBeenCalledWith(
       {
         prompt: "Draft module 7",
         mode: "mock",
-        presetId: "crossVendorDefault",
+        presetId: "freeDefault",
       },
       {
         mockRegistry: createMockRegistry.mock.results[0]?.value,
@@ -153,9 +147,7 @@ describe("workspace controller helpers", () => {
 
     const result = await runWorkspaceSynthesis("Draft module 7", {
       apiKeyStatuses: {
-        openai: configuredStatus,
-        anthropic: configuredStatus,
-        google: configuredStatus,
+        openrouter: configuredStatus,
       },
       runSynthesisImpl,
     });
@@ -164,7 +156,7 @@ describe("workspace controller helpers", () => {
     expect(runSynthesisImpl).toHaveBeenCalledWith({
       prompt: "Draft module 7",
       mode: "real",
-      presetId: "crossVendorDefault",
+      presetId: "freeDefault",
     });
   });
 });

@@ -34,8 +34,43 @@ export const crossVendorDefaultPreset: SynthesisPreset = {
   ],
 };
 
+export const freeDefaultPreset: SynthesisPreset = {
+  id: "freeDefault",
+  slots: [
+    {
+      id: "strong",
+      provider: "openrouter",
+      modelId: "openrouter/free",
+      role: "strong",
+      outputType: "candidate",
+    },
+    {
+      id: "fast-1",
+      provider: "ollama",
+      modelId: "qwen3:8b",
+      role: "fast",
+      outputType: "candidate",
+    },
+    {
+      id: "fast-2",
+      provider: "ollama",
+      modelId: "gemma3:4b",
+      role: "fast",
+      outputType: "candidate",
+    },
+    {
+      id: "judge",
+      provider: "openrouter",
+      modelId: "openrouter/free",
+      role: "judge",
+      outputType: "judge",
+    },
+  ],
+};
+
 export const synthesisPresets: Record<SynthesisPresetId, SynthesisPreset> = {
   crossVendorDefault: crossVendorDefaultPreset,
+  freeDefault: freeDefaultPreset,
 };
 
 export function getSynthesisPreset(

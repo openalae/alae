@@ -27,6 +27,8 @@ npm run tauri dev
 - The first Tauri launch can take noticeably longer because Cargo has to download and compile the desktop dependencies.
 - Frontend build output goes to `dist/`.
 - Rust build artifacts live under `src-tauri/target/` and are ignored by Git.
+- To use the free-first live preset, add an OpenRouter key from the desktop settings panel.
+- Ollama is optional but recommended for the free preset. If you want local candidates, keep Ollama running at `http://127.0.0.1:11434/v1` and pull the models you plan to use.
 
 ## Recommended Tooling
 

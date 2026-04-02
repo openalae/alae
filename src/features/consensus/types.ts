@@ -14,7 +14,7 @@ import type {
   TruthPanelSnapshot,
 } from "@/schema";
 
-export const synthesisPresetIds = ["crossVendorDefault"] as const;
+export const synthesisPresetIds = ["crossVendorDefault", "freeDefault"] as const;
 export const synthesisSlotIds = ["strong", "fast-1", "fast-2", "judge"] as const;
 
 export type SynthesisPresetId = (typeof synthesisPresetIds)[number];

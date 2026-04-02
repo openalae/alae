@@ -12,6 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   providerDefinitions,
+  providerRequiresApiKey,
+  type CredentialProviderId,
   type SupportedProviderId,
 } from "@/features/settings/providers";
 import { removeApiKey, saveApiKey } from "@/features/settings/api-key-bridge";
@@ -19,12 +21,12 @@ import { useAppStore } from "@/store";
 
 type ProviderAction = "idle" | "saving" | "deleting";
 
-function buildProviderRecord<TValue>(factory: () => TValue): Record<SupportedProviderId, TValue> {
-  return {
-    openai: factory(),
-    anthropic: factory(),
-    google: factory(),
-  };
+function buildProviderRecord<TValue>(
+  factory: (provider: SupportedProviderId) => TValue,
+): Record<SupportedProviderId, TValue> {
+  return Object.fromEntries(
+    providerDefinitions.map((provider) => [provider.id, factory(provider.id)]),
+  ) as Record<SupportedProviderId, TValue>;
 }
 
 function getErrorMessage(error: unknown) {
@@ -81,7 +83,7 @@ export function ProviderAccessCard({
     setFeedbackMessage(provider, null);
   };
 
-  const handleSave = async (provider: SupportedProviderId) => {
+  const handleSave = async (provider: CredentialProviderId) => {
     if (!inputValues[provider].trim()) {
       setFeedbackMessage(provider, "API key is required.");
       return;
@@ -104,7 +106,7 @@ export function ProviderAccessCard({
     }
   };
 
-  const handleDelete = async (provider: SupportedProviderId) => {
+  const handleDelete = async (provider: CredentialProviderId) => {
     setRowAction(provider, "deleting");
 
     try {
@@ -130,8 +132,8 @@ export function ProviderAccessCard({
           Model providers
         </CardTitle>
         <CardDescription>
-          Add API keys to switch from Demo mode to live model calls. Keys stay in the native
-          secure store.
+          Add hosted-provider API keys or connect local runtimes to switch from demo mode to live
+          model calls. Stored keys stay in the native secure store.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -142,22 +144,34 @@ export function ProviderAccessCard({
         ) : null}
 
         {providerDefinitions.map((provider) => {
+          const requiresApiKey = providerRequiresApiKey(provider.id);
+          const credentialProviderId = requiresApiKey
+            ? (provider.id as CredentialProviderId)
+            : null;
           const status = apiKeyStatuses[provider.id] ?? {
-            configured: false,
+            configured: !requiresApiKey,
             lastCheckedAt: null,
             error: null,
           };
           const isBusy = rowActions[provider.id] !== "idle";
-          const statusLabel = status.configured ? "Ready" : "Missing key";
-          const statusClasses = status.configured
+          const statusLabel = !requiresApiKey
+            ? "Local runtime"
+            : status.configured
+              ? "Ready"
+              : "Missing key";
+          const statusClasses = !requiresApiKey
+            ? "border-sky-500/30 bg-sky-500/10 text-sky-900"
+            : status.configured
             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900"
             : "border-border/80 bg-background/70 text-muted-foreground";
           const feedback =
             feedbackMessages[provider.id] ??
             status.error ??
-            (status.lastCheckedAt
-              ? `Checked ${status.lastCheckedAt}`
-              : "No key saved yet.");
+            (requiresApiKey
+              ? status.lastCheckedAt
+                ? `Checked ${status.lastCheckedAt}`
+                : "No key saved yet."
+              : provider.connectionHint ?? "No API key required.");
 
           return (
             <section
@@ -186,35 +200,47 @@ export function ProviderAccessCard({
                 )}
               </div>
 
-              <div className="mt-4 grid gap-3">
-                <label className="text-sm font-medium" htmlFor={`api-key-${provider.id}`}>
-                  API key
-                </label>
-                <Input
-                  id={`api-key-${provider.id}`}
-                  type="password"
-                  value={inputValues[provider.id]}
-                  onChange={(event) => handleInputChange(provider.id, event.target.value)}
-                  placeholder={provider.placeholder}
-                  autoComplete="off"
-                  spellCheck={false}
-                  disabled={isBusy}
-                />
-
-                <div className="flex flex-wrap gap-3">
-                  <Button disabled={isBusy} onClick={() => void handleSave(provider.id)}>
-                    {rowActions[provider.id] === "saving" ? "Saving..." : "Save key"}
-                  </Button>
-                  <Button
-                    variant="outline"
+              {requiresApiKey ? (
+                <div className="mt-4 grid gap-3">
+                  <label className="text-sm font-medium" htmlFor={`api-key-${provider.id}`}>
+                    API key
+                  </label>
+                  <Input
+                    id={`api-key-${provider.id}`}
+                    type="password"
+                    value={inputValues[provider.id]}
+                    onChange={(event) => handleInputChange(provider.id, event.target.value)}
+                    placeholder={provider.placeholder}
+                    autoComplete="off"
+                    spellCheck={false}
                     disabled={isBusy}
-                    onClick={() => void handleDelete(provider.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {rowActions[provider.id] === "deleting" ? "Removing..." : "Remove key"}
-                  </Button>
+                  />
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      disabled={isBusy}
+                      onClick={() => void handleSave(credentialProviderId!)}
+                    >
+                      {rowActions[provider.id] === "saving" ? "Saving..." : "Save key"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={isBusy}
+                      onClick={() => void handleDelete(credentialProviderId!)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {rowActions[provider.id] === "deleting" ? "Removing..." : "Remove key"}
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+                  <p className="text-sm font-medium">Connection</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {provider.connectionHint}
+                  </p>
+                </div>
+              )}
 
               <p className="mt-4 text-sm leading-6 text-muted-foreground">{feedback}</p>
             </section>

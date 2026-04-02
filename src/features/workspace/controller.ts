@@ -20,6 +20,7 @@ import {
   type ApiKeyStatus,
 } from "@/store";
 import { appStore } from "@/store/app-store";
+import { providerRequiresApiKey } from "@/features/settings";
 import type {
   Conversation,
   ConversationBranch,
@@ -28,7 +29,7 @@ import type {
   LoadedConversation,
 } from "@/schema";
 
-export const defaultWorkspacePresetId: SynthesisPresetId = "crossVendorDefault";
+export const defaultWorkspacePresetId: SynthesisPresetId = "freeDefault";
 
 type ApiKeyStatuses = Record<string, ApiKeyStatus>;
 type WorkspaceBootstrapStatus = "loading" | "ready" | "error";
@@ -252,7 +253,7 @@ export function resolveWorkspaceRunMode(
   const requiredProviders = new Set(preset.slots.map((slot) => slot.provider));
 
   for (const provider of requiredProviders) {
-    if (!apiKeyStatuses[provider]?.configured) {
+    if (providerRequiresApiKey(provider) && !apiKeyStatuses[provider]?.configured) {
       return "mock";
     }
   }
