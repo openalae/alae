@@ -512,4 +512,36 @@ describe("ProgressiveWorkspace", () => {
       expect(appStore.getState().currentConversationId).toBe("conversation-module-9-error");
     });
   });
+
+  it("submits using the selected preset for the next run", async () => {
+    const createdConversation = createEmptyConversation();
+    const persistedConversation = createConversationSnapshot();
+
+    repositoryMock.createConversation.mockResolvedValue(createdConversation);
+    repositoryMock.appendNode.mockResolvedValue(persistedConversation.nodes[0]);
+    repositoryMock.loadConversation.mockResolvedValue(persistedConversation);
+    runSynthesisMock.mockResolvedValue({
+      report,
+      truthPanelSnapshot,
+    });
+
+    render(<ProgressiveWorkspace />);
+
+    const promptField = await screen.findByLabelText("Question");
+    fireEvent.click(screen.getByRole("button", { name: /Cross-vendor/i }));
+    fireEvent.change(promptField, { target: { value: "Compare the premium providers." } });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze question" }));
+
+    await waitFor(() => {
+      expect(runSynthesisMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: "Compare the premium providers.",
+          presetId: "crossVendorDefault",
+        }),
+        expect.objectContaining({
+          mockRegistry: expect.any(Object),
+        }),
+      );
+    });
+  });
 });

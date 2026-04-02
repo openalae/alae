@@ -43,6 +43,11 @@ describe("ProviderAccessCard", () => {
             lastCheckedAt: "2026-03-17T00:00:00.000Z",
             error: null,
           },
+          ollama: {
+            configured: false,
+            lastCheckedAt: "2026-03-17T00:00:00.000Z",
+            error: null,
+          },
         },
       }),
     );
@@ -58,7 +63,7 @@ describe("ProviderAccessCard", () => {
     expect(screen.getByText("OpenRouter")).toBeInTheDocument();
     expect(screen.getByText("Ollama")).toBeInTheDocument();
     expect(screen.getByText("Ready")).toBeInTheDocument();
-    expect(screen.getByText("Local runtime")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
   });
 
   it("renders panel-level refresh state from the shell", () => {
@@ -123,7 +128,17 @@ describe("ProviderAccessCard", () => {
 
     expect(
       screen.getAllByText(/Keep Ollama running at http:\/\/127\.0\.0\.1:11434\/v1/i),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Save key" })).toHaveLength(4);
+  });
+
+  it("calls the refresh callback when requested", () => {
+    const onRefresh = vi.fn();
+
+    render(<ProviderAccessCard onRefresh={onRefresh} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh access" }));
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 });

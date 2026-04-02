@@ -202,6 +202,20 @@ describe("App", () => {
     });
   });
 
+  it("refreshes provider access again when the user requests it", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(refreshApiKeyStatusesMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh access" }));
+
+    await waitFor(() => {
+      expect(refreshApiKeyStatusesMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("shares truth-panel toggle state between the workspace header and the right rail", async () => {
     repositoryMock.loadLatestConversation.mockResolvedValue(createRestoredConversation());
     repositoryMock.listConversations.mockResolvedValue([

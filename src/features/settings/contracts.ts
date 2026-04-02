@@ -26,4 +26,10 @@ export const ApiKeyStatusesSchema = z
   })
   .strict();
 
+export const LocalProviderStatusesSchema = z
+  .object({
+    ollama: z.boolean().optional(),
+  })
+  .strict();
+
 export const ApiKeyValueSchema = z.string().min(1).nullable();

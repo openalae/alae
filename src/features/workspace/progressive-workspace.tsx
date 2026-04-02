@@ -18,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { synthesisPresetDefinitions } from "@/features/consensus";
 import { toggleTruthPanel, useTruthPanelState } from "@/features/truth-panel";
 import {
   useWorkspaceController,
@@ -169,6 +170,52 @@ function renderList(items: string[]) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function PresetPicker(props: {
+  selectedPresetId: WorkspaceController["selectedPresetId"];
+  onSelectPresetId: WorkspaceController["setSelectedPresetId"];
+  isBusy: boolean;
+}) {
+  return (
+    <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">
+      <div className="flex flex-col gap-2">
+        <div className="text-sm font-medium">Run preset</div>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Choose the model mix for the next analysis run.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {synthesisPresetDefinitions.map((preset) => {
+          const isSelected = preset.id === props.selectedPresetId;
+
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              disabled={props.isBusy}
+              aria-pressed={isSelected}
+              className={`rounded-[1.5rem] border px-4 py-4 text-left transition-colors ${
+                isSelected
+                  ? "border-primary/40 bg-primary/10"
+                  : "border-border/70 bg-card/75 hover:bg-card"
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+              onClick={() => props.onSelectPresetId(preset.id)}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-semibold">{preset.label}</div>
+                <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  {preset.providerSummary}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">{preset.description}</p>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -690,6 +737,9 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
     isRunning,
     isBusy,
     displayMode,
+    selectedPresetId,
+    selectedPresetDefinition,
+    setSelectedPresetId,
     selectedConversation,
     selectedBranch,
     selectedNode,
@@ -725,6 +775,9 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex rounded-full border border-border/80 bg-background/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Next run: {selectedPresetDefinition.label}
+            </span>
             <Button type="button" variant="outline" size="sm" onClick={toggleTruthPanel}>
               {isTruthPanelOpen ? "Hide Model Status" : "Show Model Status"}
             </Button>
@@ -744,6 +797,12 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
           nodeTitle={selectedNode?.title ?? null}
           pendingSubmissionMode={pendingSubmissionMode}
           selectedNodeIsHead={selectedNodeIsHead}
+        />
+
+        <PresetPicker
+          selectedPresetId={selectedPresetId}
+          onSelectPresetId={setSelectedPresetId}
+          isBusy={isBusy}
         />
 
         <section className="rounded-[1.75rem] border border-border/70 bg-background/80 p-5">

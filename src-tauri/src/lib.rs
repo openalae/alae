@@ -1,4 +1,5 @@
 mod credentials;
+mod local_providers;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -8,7 +9,8 @@ pub fn run() {
             credentials::set_api_key,
             credentials::delete_api_key,
             credentials::get_api_key_statuses,
-            credentials::get_api_key
+            credentials::get_api_key,
+            local_providers::get_local_provider_statuses
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  getSynthesisPresetDefinition,
   createDefaultMockRegistry,
   getSynthesisPreset,
   runSynthesis,
@@ -318,7 +319,12 @@ export function useWorkspaceController() {
   const [bootstrapErrorMessage, setBootstrapErrorMessage] = useState<string | null>(null);
   const [bootstrapStatus, setBootstrapStatus] = useState<WorkspaceBootstrapStatus>("loading");
   const [lastExecutionMode, setLastExecutionMode] = useState<SynthesisMode | null>(null);
-  const effectiveMode = resolveWorkspaceRunMode(apiKeyStatuses);
+  const [selectedPresetId, setSelectedPresetId] = useState<SynthesisPresetId>(
+    defaultWorkspacePresetId,
+  );
+  const selectedPreset = getSynthesisPreset(selectedPresetId);
+  const selectedPresetDefinition = getSynthesisPresetDefinition(selectedPresetId);
+  const effectiveMode = resolveWorkspaceRunMode(apiKeyStatuses, selectedPreset);
   const displayMode = latestSynthesisReport ? (lastExecutionMode ?? effectiveMode) : effectiveMode;
   const isRunning = runStatus === "running";
   const isBootstrapping = bootstrapStatus === "loading";
@@ -543,6 +549,7 @@ export function useWorkspaceController() {
 
       const result = await runWorkspaceSynthesis(trimmedPrompt, {
         apiKeyStatuses,
+        presetId: selectedPresetId,
       });
 
       const persistedConversation = await persistWorkspaceNode({
@@ -614,6 +621,10 @@ export function useWorkspaceController() {
     isBusy,
     effectiveMode,
     displayMode,
+    selectedPresetId,
+    selectedPreset,
+    selectedPresetDefinition,
+    setSelectedPresetId,
     conversationSummaries,
     loadedConversation,
     selectedConversation,

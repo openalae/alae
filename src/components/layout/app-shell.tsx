@@ -114,10 +114,23 @@ export function AppShell() {
   const [isRefreshingProviders, setIsRefreshingProviders] = useState(true);
   const [providerPanelError, setProviderPanelError] = useState<string | null>(null);
 
+  const refreshProviders = async () => {
+    setIsRefreshingProviders(true);
+    setProviderPanelError(null);
+
+    try {
+      await refreshApiKeyStatuses();
+    } catch (error) {
+      setProviderPanelError(getErrorMessage(error));
+    } finally {
+      setIsRefreshingProviders(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
-    refreshApiKeyStatuses()
+    void refreshApiKeyStatuses()
       .catch((error) => {
         if (active) {
           setProviderPanelError(getErrorMessage(error));
@@ -202,6 +215,7 @@ export function AppShell() {
           <ProviderAccessCard
             isRefreshing={isRefreshingProviders}
             panelError={providerPanelError}
+            onRefresh={() => void refreshProviders()}
           />
           <TruthPanel />
         </div>

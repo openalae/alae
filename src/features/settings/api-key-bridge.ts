@@ -6,6 +6,7 @@ import {
   ApiKeyMutationResultSchema,
   ApiKeyStatusesSchema,
   ApiKeyValueSchema,
+  LocalProviderStatusesSchema,
 } from "@/features/settings/contracts";
 import {
   providerDefinitions,
@@ -42,28 +43,33 @@ function toErrorMessage(error: unknown) {
 function getStoredStatus(provider: SupportedProviderId): ApiKeyStatus {
   return (
     appStore.getState().apiKeyStatuses[provider] ?? {
-      configured: !providerRequiresApiKey(provider),
+      configured: false,
       lastCheckedAt: null,
       error: null,
     }
   );
 }
 
-function buildStatusMap(
-  configuredMap: Partial<Record<CredentialProviderId, boolean>>,
+function buildSuccessStatusMap(
+  hostedConfiguredMap: Partial<Record<CredentialProviderId, boolean>>,
+  localConfiguredMap: Partial<Record<SupportedProviderId, boolean>>,
   lastCheckedAt: string,
-  error: string | null = null,
+  localErrors: Partial<Record<SupportedProviderId, string | null>> = {},
 ): Record<SupportedProviderId, ApiKeyStatus> {
   return Object.fromEntries(
     providerDefinitions.map((provider) => [
       provider.id,
-      {
-        configured: providerRequiresApiKey(provider.id)
-          ? configuredMap[provider.id] ?? false
-          : true,
-        lastCheckedAt,
-        error: providerRequiresApiKey(provider.id) ? error : null,
-      },
+      providerRequiresApiKey(provider.id)
+        ? {
+            configured: hostedConfiguredMap[provider.id] ?? false,
+            lastCheckedAt,
+            error: null,
+          }
+        : {
+            configured: localConfiguredMap[provider.id] ?? false,
+            lastCheckedAt,
+            error: localErrors[provider.id] ?? null,
+          },
     ]),
   ) as Record<SupportedProviderId, ApiKeyStatus>;
 }
@@ -72,13 +78,13 @@ function buildFailureStatusMap(lastCheckedAt: string, error: string) {
   return Object.fromEntries(
     providerDefinitions.map((provider) => [
       provider.id,
-      {
-        configured: providerRequiresApiKey(provider.id)
-          ? getStoredStatus(provider.id).configured
-          : true,
-        lastCheckedAt,
-        error: providerRequiresApiKey(provider.id) ? error : null,
-      },
+      providerRequiresApiKey(provider.id)
+        ? {
+            configured: getStoredStatus(provider.id).configured,
+            lastCheckedAt,
+            error,
+          }
+        : getStoredStatus(provider.id),
     ]),
   ) as Record<SupportedProviderId, ApiKeyStatus>;
 }
@@ -94,12 +100,15 @@ export async function refreshApiKeyStatuses(): Promise<void> {
 
   if (!hasTauriRuntime()) {
     appStore.getState().setApiKeyStatuses(
-      buildStatusMap(
+      buildSuccessStatusMap(
         {
           openai: false,
           anthropic: false,
           google: false,
           openrouter: false,
+        },
+        {
+          ollama: false,
         },
         lastCheckedAt,
       ),
@@ -108,17 +117,42 @@ export async function refreshApiKeyStatuses(): Promise<void> {
   }
 
   try {
-    const result = ApiKeyStatusesSchema.parse(await invoke("get_api_key_statuses"));
+    const [hostedResult, localResult] = await Promise.allSettled([
+      invoke("get_api_key_statuses"),
+      invoke("get_local_provider_statuses"),
+    ]);
+
+    if (hostedResult.status === "rejected") {
+      throw hostedResult.reason;
+    }
+
+    const hostedStatuses = ApiKeyStatusesSchema.parse(hostedResult.value);
+    const localErrors: Partial<Record<SupportedProviderId, string | null>> = {};
+    let localStatuses: Partial<Record<SupportedProviderId, boolean>> = {
+      ollama: false,
+    };
+
+    if (localResult.status === "fulfilled") {
+      const parsedLocalStatuses = LocalProviderStatusesSchema.parse(localResult.value);
+
+      localStatuses = {
+        ollama: parsedLocalStatuses.ollama ?? false,
+      };
+    } else {
+      localErrors.ollama = toErrorMessage(localResult.reason);
+    }
 
     appStore.getState().setApiKeyStatuses(
-      buildStatusMap(
+      buildSuccessStatusMap(
         {
-          openai: result.openai ?? false,
-          anthropic: result.anthropic ?? false,
-          google: result.google ?? false,
-          openrouter: result.openrouter ?? false,
+          openai: hostedStatuses.openai ?? false,
+          anthropic: hostedStatuses.anthropic ?? false,
+          google: hostedStatuses.google ?? false,
+          openrouter: hostedStatuses.openrouter ?? false,
         },
+        localStatuses,
         lastCheckedAt,
+        localErrors,
       ),
     );
   } catch (error) {

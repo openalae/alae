@@ -44,11 +44,13 @@ function getErrorMessage(error: unknown) {
 type ProviderAccessCardProps = {
   isRefreshing?: boolean;
   panelError?: string | null;
+  onRefresh?: () => void;
 };
 
 export function ProviderAccessCard({
   isRefreshing = false,
   panelError = null,
+  onRefresh,
 }: ProviderAccessCardProps) {
   const apiKeyStatuses = useAppStore((state) => state.apiKeyStatuses);
   const [inputValues, setInputValues] = useState<Record<SupportedProviderId, string>>(() =>
@@ -127,14 +129,24 @@ export function ProviderAccessCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-3">
-          <KeyRound className="h-5 w-5 text-primary" />
-          Model providers
-        </CardTitle>
-        <CardDescription>
-          Add hosted-provider API keys or connect local runtimes to switch from demo mode to live
-          model calls. Stored keys stay in the native secure store.
-        </CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-3">
+              <KeyRound className="h-5 w-5 text-primary" />
+              Model providers
+            </CardTitle>
+            <CardDescription className="mt-2">
+              Add hosted-provider API keys or connect local runtimes to switch from demo mode to
+              live model calls. Stored keys stay in the native secure store.
+            </CardDescription>
+          </div>
+
+          {onRefresh ? (
+            <Button variant="outline" size="sm" disabled={isRefreshing} onClick={onRefresh}>
+              {isRefreshing ? "Refreshing..." : "Refresh access"}
+            </Button>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {panelError ? (
@@ -149,21 +161,29 @@ export function ProviderAccessCard({
             ? (provider.id as CredentialProviderId)
             : null;
           const status = apiKeyStatuses[provider.id] ?? {
-            configured: !requiresApiKey,
+            configured: false,
             lastCheckedAt: null,
             error: null,
           };
           const isBusy = rowActions[provider.id] !== "idle";
-          const statusLabel = !requiresApiKey
-            ? "Local runtime"
-            : status.configured
+          const statusLabel = requiresApiKey
+            ? status.configured
               ? "Ready"
-              : "Missing key";
-          const statusClasses = !requiresApiKey
-            ? "border-sky-500/30 bg-sky-500/10 text-sky-900"
-            : status.configured
-            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900"
-            : "border-border/80 bg-background/70 text-muted-foreground";
+              : "Missing key"
+            : status.lastCheckedAt === null
+              ? "Not checked"
+              : status.configured
+                ? "Available"
+                : "Unavailable";
+          const statusClasses = requiresApiKey
+            ? status.configured
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900"
+              : "border-border/80 bg-background/70 text-muted-foreground"
+            : status.lastCheckedAt === null
+              ? "border-border/80 bg-background/70 text-muted-foreground"
+              : status.configured
+                ? "border-sky-500/30 bg-sky-500/10 text-sky-900"
+                : "border-rose-500/30 bg-rose-500/10 text-rose-900";
           const feedback =
             feedbackMessages[provider.id] ??
             status.error ??
@@ -171,7 +191,11 @@ export function ProviderAccessCard({
               ? status.lastCheckedAt
                 ? `Checked ${status.lastCheckedAt}`
                 : "No key saved yet."
-              : provider.connectionHint ?? "No API key required.");
+              : status.lastCheckedAt
+                ? status.configured
+                  ? `Runtime detected at ${provider.connectionHint?.match(/http:\/\/[^\s]+/u)?.[0] ?? "the local endpoint"}.`
+                  : "No local runtime responded on the expected Ollama endpoint."
+                : "Run a refresh to check the local runtime.");
 
           return (
             <section

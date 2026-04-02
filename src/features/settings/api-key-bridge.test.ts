@@ -33,11 +33,23 @@ describe("api-key-bridge", () => {
   });
 
   it("refreshes provider statuses into the global store", async () => {
-    invokeMock.mockResolvedValue({
-      openai: true,
-      anthropic: false,
-      google: true,
-      openrouter: false,
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "get_api_key_statuses") {
+        return {
+          openai: true,
+          anthropic: false,
+          google: true,
+          openrouter: false,
+        };
+      }
+
+      if (command === "get_local_provider_statuses") {
+        return {
+          ollama: true,
+        };
+      }
+
+      throw new Error(`Unexpected command: ${command}`);
     });
 
     await refreshApiKeyStatuses();
@@ -62,8 +74,8 @@ describe("api-key-bridge", () => {
     expect(appStore.getState().apiKeyStatuses.openai?.configured).toBe(true);
     expect(appStore.getState().apiKeyStatuses.openai?.error).toBe("native failure");
     expect(appStore.getState().apiKeyStatuses.google?.configured).toBe(false);
-    expect(appStore.getState().apiKeyStatuses.ollama?.configured).toBe(true);
-    expect(appStore.getState().apiKeyStatuses.ollama?.error).toBeNull();
+    expect(appStore.getState().apiKeyStatuses.ollama?.configured).toBe(false);
+    expect(appStore.getState().apiKeyStatuses.ollama?.lastCheckedAt).toBeNull();
   });
 
   it("stores configuration status without persisting raw keys", async () => {
@@ -121,5 +133,30 @@ describe("api-key-bridge", () => {
       key: "sk-or-v1-test",
     });
     expect(appStore.getState().apiKeyStatuses.openrouter?.configured).toBe(true);
+  });
+
+  it("keeps hosted provider refreshes working when the local runtime check fails", async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "get_api_key_statuses") {
+        return {
+          openai: true,
+          anthropic: false,
+          google: false,
+          openrouter: true,
+        };
+      }
+
+      if (command === "get_local_provider_statuses") {
+        throw new Error("ollama probe failed");
+      }
+
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await refreshApiKeyStatuses();
+
+    expect(appStore.getState().apiKeyStatuses.openrouter?.configured).toBe(true);
+    expect(appStore.getState().apiKeyStatuses.ollama?.configured).toBe(false);
+    expect(appStore.getState().apiKeyStatuses.ollama?.error).toBe("ollama probe failed");
   });
 });
