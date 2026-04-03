@@ -1,4 +1,5 @@
 export { ProviderAccessCard } from "@/features/settings/provider-access-card";
+export { SettingsModal } from "@/features/settings/settings-modal";
 export {
   readApiKey,
   refreshApiKeyStatuses,

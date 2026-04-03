@@ -471,6 +471,21 @@ export function useWorkspaceController() {
     }
   };
 
+  const startNewConversation = () => {
+    setLoadedConversation(null);
+    setPromptDraft("");
+    setLastExecutionMode(null);
+    setInputErrorMessage(null);
+    setBootstrapErrorMessage(null);
+    clearWorkspaceResults();
+    appStore.getState().resetRuntime();
+    appStore.getState().setActivePath({
+      currentConversationId: null,
+      currentBranchId: null,
+      currentNodeId: null,
+    });
+  };
+
   const selectBranch = async (branchId: string) => {
     if (!loadedConversation) {
       return;
@@ -692,12 +707,14 @@ export function useWorkspaceController() {
     selectedConversation,
     selectedBranch,
     selectedNode,
+    siblingBranches: selectedBranch ? (loadedConversation?.branches.filter(b => b.sourceNodeId === selectedBranch.sourceNodeId) ?? []) : [],
     selectedBranchId: currentBranchId,
     selectedNodeId: currentNodeId,
     selectedNodeIsHead,
     pendingSubmissionMode,
     submitPrompt,
     selectConversation,
+    startNewConversation,
     selectBranch,
     selectNode,
     forkSelectedNode,

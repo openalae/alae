@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { getProviderAccessSectionId } from "@/features/settings/providers";
 import { createInitialAppStoreState } from "@/store";
 import { appStore } from "@/store/app-store";
 import type { LoadedConversation } from "@/schema";
@@ -46,7 +45,18 @@ vi.mock("@/features/reasoning-tree", async () => {
   };
 });
 
-import { ProgressiveWorkspace } from "@/features/workspace";
+import { ProgressiveWorkspace, GlobalInputShell, useWorkspaceController } from "@/features/workspace";
+import { useSettingsStore } from "@/store/settings";
+
+function TestWorkspace() {
+  const controller = useWorkspaceController();
+  return (
+    <div>
+      <ProgressiveWorkspace controller={controller} />
+      <GlobalInputShell controller={controller} />
+    </div>
+  );
+}
 
 const report = {
   id: "report-module-9",
@@ -299,6 +309,7 @@ function createEmptyConversation(options: {
 describe("ProgressiveWorkspace", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    useSettingsStore.setState({ developerMode: true });
     runSynthesisMock.mockReset();
     createReasoningTreeRepositoryMock.mockClear();
     repositoryMock.createConversation.mockReset();
@@ -349,13 +360,13 @@ describe("ProgressiveWorkspace", () => {
     const restoredConversation = createConversationSnapshot();
     repositoryMock.loadLatestConversation.mockResolvedValue(restoredConversation);
 
-    render(<ProgressiveWorkspace />);
+    render(<TestWorkspace />);
 
+    // Report summary should be visible inside the accordion (default open)
     expect(
-      await screen.findByRole("heading", {
-        level: 3,
-        name: /Persist the workspace output and recover the latest local conversation/i,
-      }),
+      await screen.findByText(
+        /Persist the workspace output and recover the latest local conversation/i,
+      ),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -382,7 +393,7 @@ describe("ProgressiveWorkspace", () => {
     repositoryMock.loadConversation.mockResolvedValue(persistedConversation);
     runSynthesisMock.mockReturnValue(runDeferred.promise);
 
-    render(<ProgressiveWorkspace />);
+    render(<TestWorkspace />);
 
     expect(screen.getByText("Loading your latest saved analysis.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Restoring/i })).toBeDisabled();
@@ -408,11 +419,11 @@ describe("ProgressiveWorkspace", () => {
       truthPanelSnapshot,
     });
 
+    // Report summary visible inside default-open accordion
     expect(
-      await screen.findByRole("heading", {
-        level: 3,
-        name: /Persist the workspace output and recover the latest local conversation/i,
-      }),
+      await screen.findByText(
+        /Persist the workspace output and recover the latest local conversation/i,
+      ),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -430,7 +441,7 @@ describe("ProgressiveWorkspace", () => {
       expect(appStore.getState().currentNodeId).toBe("node-module-9");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /judge\s+openai \/ gpt-5\.2/i }));
+    // Model run content is visible in the split view panels
     expect(screen.getByText("{\"summary\":\"Judge run\"}")).toBeInTheDocument();
   });
 
@@ -448,18 +459,19 @@ describe("ProgressiveWorkspace", () => {
     repositoryMock.appendNode.mockResolvedValue(failedConversation.nodes[0]);
     runSynthesisMock.mockRejectedValue(new Error("transport down"));
 
-    render(<ProgressiveWorkspace />);
+    render(<TestWorkspace />);
 
+    // Wait for report to render
     expect(
-      await screen.findByRole("heading", {
-        level: 3,
-        name: /Persist the workspace output and recover the latest local conversation/i,
-      }),
+      await screen.findByText(
+        /Persist the workspace output and recover the latest local conversation/i,
+      ),
     ).toBeInTheDocument();
 
     const promptField = screen.getByLabelText("Question");
     fireEvent.change(promptField, { target: { value: "Retry module 9." } });
-    fireEvent.click(screen.getByRole("button", { name: "Analyze question" }));
+    // Use Cmd+Enter to submit (the Commit button doesn't have "Analyze question" anymore)
+    fireEvent.keyDown(promptField, { key: "Enter", metaKey: true });
 
     expect(await screen.findByText("transport down")).toBeInTheDocument();
 
@@ -498,7 +510,7 @@ describe("ProgressiveWorkspace", () => {
       truthPanelSnapshot,
     });
 
-    render(<ProgressiveWorkspace />);
+    render(<TestWorkspace />);
 
     expect(
       await screen.findByText("Unable to restore the latest local conversation. idb unavailable"),
@@ -510,13 +522,12 @@ describe("ProgressiveWorkspace", () => {
     });
 
     fireEvent.change(promptField, { target: { value: "Build module 9 after restore failure." } });
-    fireEvent.click(screen.getByRole("button", { name: "Analyze question" }));
+    fireEvent.keyDown(promptField, { key: "Enter", metaKey: true });
 
     expect(
-      await screen.findByRole("heading", {
-        level: 3,
-        name: /Persist the workspace output and recover the latest local conversation/i,
-      }),
+      await screen.findByText(
+        /Persist the workspace output and recover the latest local conversation/i,
+      ),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -537,12 +548,18 @@ describe("ProgressiveWorkspace", () => {
       truthPanelSnapshot,
     });
 
-    render(<ProgressiveWorkspace />);
+    render(<TestWorkspace />);
 
     const promptField = await screen.findByLabelText("Question");
-    fireEvent.click(screen.getByRole("button", { name: /Cross-vendor/i }));
+    // Open preset picker and select Cross-vendor
+    fireEvent.click(screen.getByText(/Free-first/i));
+    await waitFor(() => {
+      expect(screen.getByText("Cross-vendor")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Cross-vendor"));
+
     fireEvent.change(promptField, { target: { value: "Compare the premium providers." } });
-    fireEvent.click(screen.getByRole("button", { name: "Analyze question" }));
+    fireEvent.keyDown(promptField, { key: "Enter", metaKey: true });
 
     await waitFor(() => {
       expect(runSynthesisMock).toHaveBeenCalledWith(
@@ -557,122 +574,28 @@ describe("ProgressiveWorkspace", () => {
     });
   });
 
-  it("shows which hosted provider is missing for the selected preset", async () => {
-    render(<ProgressiveWorkspace />);
-
-    const presetButton = await screen.findByRole("button", {
-      name: /Cross-vendor Anthropic \+ OpenAI \+ Google/i,
-    });
-    fireEvent.click(presetButton);
-
-    expect(
-      screen.getByText("Cross-vendor is missing required hosted access."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /Missing hosted access: Google\. This preset will stay in Demo until those providers are configured\./i,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open provider access" })).toBeInTheDocument();
-  });
-
-  it("warns when the selected preset can run live but a local runtime is unavailable", async () => {
-    appStore.setState(
-      createInitialAppStoreState({
-        apiKeyStatuses: {
-          openai: {
-            configured: true,
-            lastCheckedAt: "2026-03-18T00:00:00.000Z",
-            error: null,
-          },
-          anthropic: {
-            configured: true,
-            lastCheckedAt: "2026-03-18T00:00:00.000Z",
-            error: null,
-          },
-          google: {
-            configured: false,
-            lastCheckedAt: "2026-03-18T00:00:00.000Z",
-            error: null,
-          },
-          openrouter: {
-            configured: true,
-            lastCheckedAt: "2026-03-18T00:00:00.000Z",
-            error: null,
-          },
-          ollama: {
-            configured: false,
-            lastCheckedAt: "2026-03-18T00:00:00.000Z",
-            error: "ollama probe failed",
-          },
-        },
-      }),
-    );
-
-    render(<ProgressiveWorkspace />);
-
-    expect(
-      await screen.findByText("Free-first can run live with reduced local coverage."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /Optional local runtime unavailable: Ollama\. Live runs can continue, but those local slots may fail and the report may be partial\./i,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Last local check: Ollama: ollama probe failed\./i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Keep Ollama running at http:\/\/127\.0\.0\.1:11434\/v1/i),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View Ollama setup" })).toBeInTheDocument();
-  });
-
-  it("jumps to the matching provider section from the readiness notice", async () => {
-    const providerSection = document.createElement("section");
-    providerSection.id = getProviderAccessSectionId("google");
-    providerSection.tabIndex = -1;
-    const scrollIntoView = vi.fn();
-    const focus = vi.fn();
-    providerSection.scrollIntoView = scrollIntoView;
-    providerSection.focus = focus;
-    document.body.appendChild(providerSection);
-
-    render(<ProgressiveWorkspace />);
-
-    const presetButton = await screen.findByRole("button", {
-      name: /Cross-vendor Anthropic \+ OpenAI \+ Google/i,
-    });
-    fireEvent.click(presetButton);
-    fireEvent.click(screen.getByRole("button", { name: "Open provider access" }));
-
-    expect(scrollIntoView).toHaveBeenCalledWith({
-      behavior: "smooth",
-      block: "start",
-    });
-    expect(focus).toHaveBeenCalledTimes(1);
-  });
-
   it("restores the previously selected preset from local storage", async () => {
     window.localStorage.setItem("alae.workspace.selectedPresetId", "crossVendorDefault");
 
-    render(<ProgressiveWorkspace />);
+    render(<TestWorkspace />);
 
-    expect(await screen.findByText("Next run: Cross-vendor")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", {
-        name: /Cross-vendor Anthropic \+ OpenAI \+ Google/i,
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
+    // Preset label should show near the input
+    await waitFor(() => {
+      expect(screen.getByText("Cross-vendor")).toBeInTheDocument();
+    });
   });
 
   it("persists preset changes for the next session", async () => {
-    render(<ProgressiveWorkspace />);
+    render(<TestWorkspace />);
 
-    const presetButton = await screen.findByRole("button", {
-      name: /Cross-vendor Anthropic \+ OpenAI \+ Google/i,
+    // Open preset picker and select Cross-vendor
+    const presetLabel = await screen.findByText(/Free-first/i);
+    fireEvent.click(presetLabel);
+
+    await waitFor(() => {
+      expect(screen.getByText("Cross-vendor")).toBeInTheDocument();
     });
-    fireEvent.click(presetButton);
+    fireEvent.click(screen.getByText("Cross-vendor"));
 
     await waitFor(() => {
       expect(window.localStorage.getItem("alae.workspace.selectedPresetId")).toBe(

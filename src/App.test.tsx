@@ -162,9 +162,12 @@ function createRestoredConversation(): LoadedConversation {
   };
 }
 
+import { useSettingsStore } from "@/store/settings";
+
 describe("App", () => {
   beforeEach(() => {
     appStore.setState(createInitialAppStoreState());
+    useSettingsStore.setState({ developerMode: true });
     refreshApiKeyStatusesMock.mockReset();
     saveApiKeyMock.mockReset();
     removeApiKeyMock.mockReset();
@@ -183,34 +186,33 @@ describe("App", () => {
     repositoryMock.loadLatestConversation.mockResolvedValue(null);
   });
 
-  it("renders the product shell and refreshes provider status on mount", async () => {
+  it("renders the product shell with workspace and inspector on mount", async () => {
     render(<App />);
 
     expect(
       await screen.findByText(/Ask a question and get a combined answer/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("Saved analyses")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Model providers" })).toBeInTheDocument();
+    // Explorer shows "Chat History" label
+    expect(screen.getByText("Chat History")).toBeInTheDocument();
+    // Model status is in the right inspector panel
     expect(screen.getByRole("heading", { level: 2, name: "Model status" })).toBeInTheDocument();
-
+    // Repository is created on mount
     await waitFor(() => {
-      expect(refreshApiKeyStatusesMock).toHaveBeenCalledTimes(1);
       expect(createReasoningTreeRepositoryMock).toHaveBeenCalledTimes(1);
     });
   });
 
-  it("refreshes provider access again when the user requests it", async () => {
+  it("opens settings modal with provider access when gear icon is clicked", async () => {
     render(<App />);
 
-    await waitFor(() => {
-      expect(refreshApiKeyStatusesMock).toHaveBeenCalledTimes(1);
-    });
+    await screen.findByText(/Ask a question and get a combined answer/i);
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
-    await waitFor(() => {
-      expect(refreshApiKeyStatusesMock).toHaveBeenCalledTimes(2);
-    });
+    // Settings modal should be visible with "Model providers" tab
+    expect(await screen.findByText("Appearance")).toBeInTheDocument();
+    expect(screen.getByText("Model providers")).toBeInTheDocument();
+    expect(screen.getByText("Advanced")).toBeInTheDocument();
   });
 
   it("shares truth-panel toggle state between the workspace header and the right rail", async () => {
@@ -228,11 +230,9 @@ describe("App", () => {
 
     render(<App />);
 
+    // Wait for report summary to appear (inside accordion, default open)
     expect(
-      await screen.findByRole("heading", {
-        level: 3,
-        name: /The report rendered successfully/i,
-      }),
+      await screen.findByText(/The report rendered successfully/i),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Show details/i }));

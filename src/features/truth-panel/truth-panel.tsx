@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSettingsStore } from "@/store/settings";
 import {
   Activity,
   AlertTriangle,
@@ -125,19 +127,21 @@ function TruthPanelRunList() {
     <div className="space-y-2">
       {truthPanelSnapshot.runs.map((run) => (
         <section key={run.id} className="rounded-lg border border-border/50 bg-background/80 p-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold capitalize">{run.role}</span>
-                <span className="text-xs text-muted-foreground">{run.provider} / {run.model}</span>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-semibold capitalize shrink-0">{run.role}</span>
+                <span className="text-[10px] text-muted-foreground truncate">{run.provider} / {run.model}</span>
               </div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">
                 {formatTokenUsage(run)}
               </div>
             </div>
-            <span className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider ${getRunStatusClasses(run.status)}`}>
-              {formatRunStatus(run.status, t)}
-            </span>
+            <div className="shrink-0">
+              <span className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider ${getRunStatusClasses(run.status)}`}>
+                {formatRunStatus(run.status, t)}
+              </span>
+            </div>
           </div>
           <div className="mt-2 grid gap-2">
             <PanelMetric label={t("Latency")} value={formatNullableMetric(run.latencyMs, " ms")} />
@@ -206,9 +210,51 @@ function TraceEventList() {
   );
 }
 
+function SidebarAccordionSection({
+  icon: Icon,
+  title,
+  defaultOpen = false,
+  forceOpen = false,
+  children,
+  isEmpty = false,
+}: {
+  icon: any;
+  title: string;
+  defaultOpen?: boolean;
+  forceOpen?: boolean;
+  children: React.ReactNode;
+  isEmpty?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen || forceOpen);
+  const effectiveOpen = forceOpen || (isOpen && !isEmpty);
+
+  return (
+    <section className="space-y-2">
+      <button
+        onClick={() => !isEmpty && setIsOpen(!isOpen)}
+        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors ${
+          isEmpty ? "cursor-default opacity-50" : "hover:bg-accent/50"
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <Icon className="h-3.5 w-3.5 text-primary" />
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{title}</h3>
+        </div>
+        {!isEmpty && (
+          <div className="text-muted-foreground">
+            {effectiveOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </div>
+        )}
+      </button>
+      {effectiveOpen && <div className="animate-in slide-in-from-top-1 fade-in duration-200">{children}</div>}
+    </section>
+  );
+}
+
 export function TruthPanel() {
   useTruthPanelAutoOpen();
   const { t } = useTranslation();
+  const { developerMode } = useSettingsStore();
 
   const {
     isTruthPanelOpen,
@@ -220,6 +266,8 @@ export function TruthPanel() {
   const reportStatus = latestSynthesisReport?.status ?? "idle";
   const reportStatusLabel =
     reportStatus === "idle" ? t("Waiting for analysis") : `${t("Latest result")} ${reportStatus}`;
+
+  const hasValidationIssues = (truthPanelSnapshot?.validationIssues.length ?? 0) > 0;
 
   return (
     <div className="rounded-xl border border-border/60 bg-card">
@@ -235,6 +283,7 @@ export function TruthPanel() {
           }
         }}
         className="group flex cursor-pointer items-start justify-between gap-3 rounded-t-xl border-b border-border/30 p-4 transition-colors hover:bg-accent/30"
+        aria-label={isTruthPanelOpen ? t("Hide details") as string : t("Show details") as string}
         title={isTruthPanelOpen ? t("Hide details") as string : t("Show details") as string}
       >
         <div className="space-y-1">
@@ -282,37 +331,44 @@ export function TruthPanel() {
           <CollapsedTruthPanelSummary />
         ) : (
           <div className="space-y-4">
-            <section className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <Waypoints className="h-3.5 w-3.5 text-primary" />
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("Overview")}</h3>
-              </div>
+            <SidebarAccordionSection
+              icon={Waypoints}
+              title={t("Overview")}
+              defaultOpen={true}
+              isEmpty={!truthPanelSnapshot}
+            >
               <TruthPanelSummary />
-            </section>
+            </SidebarAccordionSection>
 
-            <section className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <Clock3 className="h-3.5 w-3.5 text-primary" />
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("Model calls")}</h3>
-              </div>
+            <SidebarAccordionSection
+              icon={Clock3}
+              title={t("Model calls")}
+              defaultOpen={false}
+              isEmpty={!truthPanelSnapshot || truthPanelSnapshot.runs.length === 0}
+            >
               <TruthPanelRunList />
-            </section>
+            </SidebarAccordionSection>
 
-            <section className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 text-primary" />
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("Output issues")}</h3>
-              </div>
+            <SidebarAccordionSection
+              icon={AlertTriangle}
+              title={t("Output issues")}
+              defaultOpen={hasValidationIssues}
+              forceOpen={hasValidationIssues}
+              isEmpty={!truthPanelSnapshot || truthPanelSnapshot.validationIssues.length === 0}
+            >
               <ValidationIssueList />
-            </section>
+            </SidebarAccordionSection>
 
-            <section className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("Activity log")}</h3>
-              </div>
-              <TraceEventList />
-            </section>
+            {developerMode && (
+              <SidebarAccordionSection
+                icon={CheckCircle2}
+                title={t("Activity log")}
+                defaultOpen={false}
+                isEmpty={!truthPanelSnapshot || truthPanelSnapshot.events.length === 0}
+              >
+                <TraceEventList />
+              </SidebarAccordionSection>
+            )}
           </div>
         )}
       </div>

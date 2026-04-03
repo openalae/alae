@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { createInitialAppStoreState } from "@/store";
 import { appStore } from "@/store/app-store";
+import { useSettingsStore } from "@/store/settings";
 import { TruthPanel } from "@/features/truth-panel";
 import type { TruthPanelSnapshot, SynthesisReport } from "@/schema";
 
@@ -209,6 +210,7 @@ describe("TruthPanel", () => {
         truthPanelSnapshot: snapshot,
       }),
     );
+    useSettingsStore.setState({ developerMode: true });
 
     render(<TruthPanel />);
 
@@ -216,6 +218,11 @@ describe("TruthPanel", () => {
     expect(screen.getByRole("heading", { name: "Model calls" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Output issues" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Activity log" })).toBeInTheDocument();
+
+    // Expand collapsed sections
+    fireEvent.click(screen.getByRole("button", { name: /Model calls/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Activity log/i }));
+
     expect(screen.getByText("Aggregate input")).toBeInTheDocument();
     expect(screen.getByText("Schema validation failed")).toBeInTheDocument();
     expect(screen.getByText("Judge run completed successfully.")).toBeInTheDocument();
@@ -255,7 +262,11 @@ describe("TruthPanel", () => {
       expect(appStore.getState().isTruthPanelOpen).toBe(true);
     });
     expect(screen.getByText("Latest result failed")).toBeInTheDocument();
-    expect(screen.getByText("Model calls")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Model calls" })).toBeInTheDocument();
+
+    // Expand collapsed section
+    fireEvent.click(screen.getByRole("button", { name: /Model calls/i }));
+    expect(screen.getByText(/judge/i)).toBeInTheDocument();
   });
 
   it("does not auto open for partial reports", async () => {
