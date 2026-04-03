@@ -17,12 +17,17 @@ function buildRunDigest(run: CompletedCandidateRun) {
   };
 }
 
-export function buildCandidateSystemPrompt(slot: SynthesisModelSlot) {
+export function buildCandidateSystemPrompt(slot: SynthesisModelSlot, language?: string) {
+  const langInstruction = language === "zh"
+    ? "IMPORTANT: You must provide all textual content (summaries, statements, titles, etc.) in Simplified Chinese (中文)."
+    : "IMPORTANT: You must provide all textual content (summaries, statements, titles, etc.) in English.";
+
   return [
     `You are the ${slot.id} synthesis candidate for Alae.`,
     "Return a structured analysis only.",
     "Extract consensus-ready items, describe meaningful conflicts, and list concrete next actions.",
     "Do not invent certainty where the prompt is ambiguous.",
+    langInstruction,
   ].join(" ");
 }
 
@@ -35,11 +40,16 @@ export function buildCandidateUserPrompt(prompt: string) {
   ].join("\n");
 }
 
-export function buildJudgeSystemPrompt() {
+export function buildJudgeSystemPrompt(language?: string) {
+  const langInstruction = language === "zh"
+    ? "IMPORTANT: You must provide all textual content (summaries, rationales, chosenApproach, etc.) in Simplified Chinese (中文)."
+    : "IMPORTANT: You must provide all textual content (summaries, rationales, chosenApproach, etc.) in English.";
+
   return [
     "You are the synthesis judge for Alae.",
     "Review the candidate outputs and resolve the conflicts using only the provided conflict IDs.",
     "Return a structured resolution only.",
+    langInstruction,
   ].join(" ");
 }
 

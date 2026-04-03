@@ -242,14 +242,13 @@ export function buildFallbackResolution({
 }: BuildFallbackResolutionInput): Resolution {
   const chosenApproach =
     sourceRun.parsed.consensusItems[0]?.statement ?? sourceRun.parsed.summary;
-  const sourceLabel = formatRunLabel(sourceRun);
   const openRisks = uniqueStrings(
-    conflicts.map((conflict) => `Unresolved conflict: ${conflict.question}`),
+    conflicts.map(() => `Unresolved conflict: {{question}}`),
   );
 
   return {
-    summary: `Fallback resolution from ${sourceLabel}: ${sourceRun.parsed.summary}`,
-    rationale: `Judge resolution was unavailable, so the synthesis fell back to ${sourceLabel}.`,
+    summary: `Fallback resolution from {{label}}: {{summary}}`,
+    rationale: `Judge resolution was unavailable, so the synthesis fell back to {{label}}.`,
     chosenApproach,
     resolvedConflictIds: [],
     judgeModelRunId: sourceRun.id,
@@ -266,10 +265,10 @@ export function buildConsensusSummary(
   }
 
   if (consensusItems.length === 0) {
-    return `No consensus items met the 2-of-N threshold across ${successfulCandidateCount} successful candidate runs.`;
+    return "No consensus items met the 2-of-N threshold across {{count}} successful candidate runs.";
   }
 
-  return `${consensusItems.length} consensus item(s) met the 2-of-N threshold across ${successfulCandidateCount} successful candidate runs.`;
+  return "{{itemCount}} consensus item(s) met the 2-of-N threshold across {{runCount}} successful candidate runs.";
 }
 
 export function buildNextActions(
@@ -308,14 +307,13 @@ export function buildTraceEvents({
 
   for (const execution of slotExecutions) {
     const { slot, run } = execution;
-    const label = `${slot.id} (${slot.provider}/${slot.modelId})`;
 
     if (run.error?.code === "MISSING_API_KEY") {
       pushEvent({
         kind: `missing-key:${slot.id}`,
         level: "warning",
         occurredAt: run.completedAt ?? run.startedAt,
-        message: `Missing API key for ${slot.provider}; ${slot.id} was not executed.`,
+        message: `Missing API key for {{provider}}; {{id}} was not executed.`,
       });
       continue;
     }
@@ -325,7 +323,7 @@ export function buildTraceEvents({
         kind: `failed:${slot.id}`,
         level: "error",
         occurredAt: run.completedAt ?? run.startedAt,
-        message: `${label} was skipped because no candidate run completed successfully.`,
+        message: `{{label}} was skipped because no candidate run completed successfully.`,
       });
       continue;
     }
@@ -334,7 +332,7 @@ export function buildTraceEvents({
       kind: `started:${slot.id}`,
       level: "info",
       occurredAt: run.startedAt,
-      message: `Started ${label}.`,
+      message: `Started {{label}}.`,
     });
 
     if (run.status === "completed") {
@@ -342,7 +340,7 @@ export function buildTraceEvents({
         kind: `completed:${slot.id}`,
         level: "info",
         occurredAt: run.completedAt ?? run.startedAt,
-        message: `Completed ${label}.`,
+        message: `Completed {{label}}.`,
       });
       continue;
     }
@@ -351,7 +349,7 @@ export function buildTraceEvents({
       kind: `failed:${slot.id}`,
       level: "error",
       occurredAt: run.completedAt ?? run.startedAt,
-      message: `${label} failed: ${run.error?.message ?? "Unknown model failure."}`,
+      message: `{{label}} failed: {{message}}`,
     });
   }
 

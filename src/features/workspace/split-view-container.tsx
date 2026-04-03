@@ -4,20 +4,27 @@ import { Bot, ChevronUp, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle,
 import { useSettingsStore } from "@/store/settings";
 import type { ModelRun, SynthesisReport, CandidateModelOutput, JudgeModelOutput } from "@/schema";
 
-function renderList(items: string[], t: (key: string) => string) {
+function renderList(items: string[], t: (key: string, options?: any) => string) {
   if (items.length === 0) {
     return <p className="text-sm leading-6 text-muted-foreground">{t("No items yet.")}</p>;
   }
   return (
     <ul className="space-y-2">
-      {items.map((item) => (
-        <li
-          key={item}
-          className="rounded-lg border border-border/50 bg-background/80 px-4 py-2.5 text-sm leading-6"
-        >
-          {item}
-        </li>
-      ))}
+      {items.map((item) => {
+        let content = t(item);
+        if (item.startsWith("Unresolved conflict: ")) {
+           const question = item.replace("Unresolved conflict: ", "");
+           content = t("Unresolved conflict: {{question}}", { question });
+        }
+        return (
+          <li
+            key={item}
+            className="rounded-lg border border-border/50 bg-background/80 px-4 py-2.5 text-sm leading-6"
+          >
+            {content}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -75,9 +82,10 @@ function AccordionSection({
 }
 
 function ParsedCandidate({ parsed }: { parsed: CandidateModelOutput }) {
+  const { t } = useTranslation();
   return (
     <div className="font-sans text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none text-muted-foreground">
-      <p>{parsed.summary}</p>
+      <p>{t(parsed.summary, { topic: "" })}</p>
     </div>
   );
 }
@@ -97,7 +105,7 @@ function ParsedJudge({ parsed }: { parsed: JudgeModelOutput }) {
       </div>
 
       <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground">
-        <p>{parsed.summary}</p>
+        <p>{t(parsed.summary)}</p>
       </div>
     </div>
   );
@@ -122,7 +130,7 @@ function ModelPanel({ run, onMinimize }: { run: ModelRun; onMinimize: () => void
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-primary truncate">{run.role}</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-primary truncate">{t(run.role)}</div>
               {developerMode && (
                 <button 
                   onClick={() => setShowRaw(!showRaw)}
@@ -133,7 +141,7 @@ function ModelPanel({ run, onMinimize }: { run: ModelRun; onMinimize: () => void
                   }`}
                   title={showRaw ? t("Switch to Parsed View") as string : t("Switch to JSON View") as string}
                 >
-                  {showRaw ? "JSON" : "Parsed"}
+                  {showRaw ? t("JSON") : t("Parsed")}
                 </button>
               )}
             </div>
@@ -202,6 +210,7 @@ function PipDock({
   runs: ModelRun[]; 
   onRestore: (runId: string) => void;
 }) {
+  const { t } = useTranslation();
   if (runs.length === 0) return null;
 
   return (
@@ -216,7 +225,7 @@ function PipDock({
             <Bot className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1 text-left">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-foreground truncate">{run.role}</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-foreground truncate">{t(run.role)}</div>
             <div className="text-[9px] text-muted-foreground font-mono truncate">{run.model}</div>
           </div>
           <ChevronUp className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -274,7 +283,7 @@ export function SynthesisReportSplitView({ report }: { report: SynthesisReport }
               defaultOpen={true}
               accentColor="text-primary"
             >
-              <div className="text-sm leading-relaxed">{report.summary}</div>
+              <div className="text-sm leading-relaxed">{t(report.summary, { topic: report.prompt })}</div>
             </AccordionSection>
 
             {/* Consensus — default CLOSED */}
@@ -285,13 +294,19 @@ export function SynthesisReportSplitView({ report }: { report: SynthesisReport }
                 count={consensusCount}
                 accentColor="text-primary"
               >
-                <div className="text-sm text-muted-foreground mb-2">{report.consensus.summary}</div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  {t(report.consensus.summary, { 
+                    count: report.modelRuns.filter(r => r.role !== 'judge' && r.status === 'completed').length,
+                    itemCount: report.consensus.items.length,
+                    runCount: report.modelRuns.filter(r => r.role !== 'judge' && r.status === 'completed').length
+                  })}
+                </div>
                 <ul className="space-y-2">
                   {report.consensus.items.map((item) => (
                     <li key={item.id} className="rounded-lg border border-border/50 bg-background/80 px-3 py-2 text-xs leading-6">
-                      <div className="font-medium">{item.statement}</div>
+                      <div className="font-medium">{t(item.statement)}</div>
                       <div className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">
-                        {item.kind} · {item.confidence} {t("confidence")} · {item.supportingRunIds.length} {t("supporting runs")}
+                        {t(item.kind)} · {t(item.confidence)} {t("confidence")} · {item.supportingRunIds.length} {t("supporting runs")}
                       </div>
                     </li>
                   ))}
@@ -311,14 +326,14 @@ export function SynthesisReportSplitView({ report }: { report: SynthesisReport }
                 <div className="space-y-3">
                   {report.conflicts.map(c => (
                     <div key={c.id} className="breathing-critical p-3 rounded-lg bg-background border border-destructive/30 text-xs">
-                      <div className="font-semibold text-destructive mb-1">{c.title}</div>
-                      <div className="text-muted-foreground leading-relaxed">{c.summary}</div>
-                      <div className="mt-2 text-sm font-medium">{c.question}</div>
+                      <div className="font-semibold text-destructive mb-1">{t(c.title)}</div>
+                      <div className="text-muted-foreground leading-relaxed">{t(c.summary)}</div>
+                      <div className="mt-2 text-sm font-medium">{t(c.question)}</div>
                       <ul className="mt-2 space-y-2">
                         {c.positions.map((position) => (
                           <li key={`${c.id}-${position.modelRunId}`} className="rounded-md border border-border/50 bg-card/60 px-2 py-1.5 text-xs">
-                            <div className="font-medium">{position.label}</div>
-                            <div className="mt-0.5">{position.stance}</div>
+                            <div className="font-medium">{t(position.label)}</div>
+                            <div className="mt-0.5">{t(position.stance)}</div>
                           </li>
                         ))}
                       </ul>
@@ -336,8 +351,23 @@ export function SynthesisReportSplitView({ report }: { report: SynthesisReport }
                 accentColor="text-primary"
               >
                 <div className="rounded-lg border border-border/50 bg-background/80 p-3 text-xs">
-                  <div className="font-medium">{report.resolution.chosenApproach}</div>
-                  <p className="mt-2 text-muted-foreground">{report.resolution.rationale}</p>
+                  <div className="font-medium">
+                    {(() => {
+                      const approach = report.resolution.chosenApproach;
+                      return t(approach);
+                    })()}
+                  </div>
+                  <div className="mt-2 text-muted-foreground">
+                    {(() => {
+                      const rationale = report.resolution.rationale;
+                      if (rationale.includes("{{label}}")) {
+                        const sourceRun = report.modelRuns.find(r => r.id === report.resolution?.judgeModelRunId);
+                        const label = sourceRun ? `${t(sourceRun.role)}:${sourceRun.provider}/${sourceRun.model}` : "Expert";
+                        return t(rationale, { label });
+                      }
+                      return t(rationale);
+                    })()}
+                  </div>
                 </div>
                 {report.resolution.openRisks.length > 0 ? (
                   <div className="mt-3">

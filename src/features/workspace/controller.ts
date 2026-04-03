@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   getSynthesisPresetDefinition,
@@ -318,7 +319,7 @@ function getWorkspacePresetReadiness(
 
 export async function runWorkspaceSynthesis(
   prompt: string,
-  options: RunWorkspaceSynthesisOptions = {},
+  options: RunWorkspaceSynthesisOptions & { language?: string } = {},
 ): Promise<WorkspaceRunResult> {
   const presetId = options.presetId ?? defaultWorkspacePresetId;
   const preset = getSynthesisPreset(presetId);
@@ -334,6 +335,7 @@ export async function runWorkspaceSynthesis(
             prompt,
             mode: "mock",
             presetId,
+            language: options.language,
           },
           {
             mockRegistry: mockRegistryFactory(presetId),
@@ -343,6 +345,7 @@ export async function runWorkspaceSynthesis(
           prompt,
           mode: "real",
           presetId,
+          language: options.language,
         });
 
   return {
@@ -353,6 +356,7 @@ export async function runWorkspaceSynthesis(
 }
 
 export function useWorkspaceController() {
+  const { t, i18n } = useTranslation();
   const currentBranchId = useAppStore((state) => state.currentBranchId);
   const currentNodeId = useAppStore((state) => state.currentNodeId);
   const apiKeyStatuses = useAppStore((state) => state.apiKeyStatuses);
@@ -606,7 +610,7 @@ export function useWorkspaceController() {
     }
 
     if (!trimmedPrompt) {
-      setInputErrorMessage("Enter a question before starting analysis.");
+      setInputErrorMessage(t("Enter a question before starting analysis."));
       return;
     }
 
@@ -624,6 +628,7 @@ export function useWorkspaceController() {
       const result = await runWorkspaceSynthesis(trimmedPrompt, {
         apiKeyStatuses,
         presetId: selectedPresetId,
+        language: i18n.language,
       });
 
       const persistedConversation = await persistWorkspaceNode({

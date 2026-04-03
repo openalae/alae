@@ -35,10 +35,6 @@ function extractUserPromptText(options: LanguageModelV1CallOptions) {
     .trim();
 }
 
-function extractTopicFromCandidatePrompt(promptText: string) {
-  const match = /Prompt:\s*([\s\S]+)$/m.exec(promptText);
-  return (match?.[1] ?? promptText).trim() || "the current user request";
-}
 
 function extractJudgePayload(promptText: string) {
   const jsonStart = promptText.indexOf("{");
@@ -115,10 +111,10 @@ function createMockLanguageModel<TObject>(input: {
   };
 }
 
-function buildStrongCandidate(topic: string): CandidateModelOutput {
+function buildStrongCandidate(): CandidateModelOutput {
   return {
     outputType: "candidate",
-    summary: `Deliver a focused synthesis workspace for ${topic}.`,
+    summary: `Deliver a focused synthesis workspace for {{topic}}.`,
     consensusItems: [
       {
         kind: "approach",
@@ -148,10 +144,10 @@ function buildStrongCandidate(topic: string): CandidateModelOutput {
   };
 }
 
-function buildFastCandidateOne(topic: string): CandidateModelOutput {
+function buildFastCandidateOne(): CandidateModelOutput {
   return {
     outputType: "candidate",
-    summary: `Use a thin workspace controller to orchestrate ${topic}.`,
+    summary: `Use a thin workspace controller to orchestrate {{topic}}.`,
     consensusItems: [
       {
         kind: "approach",
@@ -181,10 +177,10 @@ function buildFastCandidateOne(topic: string): CandidateModelOutput {
   };
 }
 
-function buildFastCandidateTwo(topic: string): CandidateModelOutput {
+function buildFastCandidateTwo(): CandidateModelOutput {
   return {
     outputType: "candidate",
-    summary: `Prefer deterministic demo coverage for ${topic} when live providers are unavailable.`,
+    summary: `Prefer deterministic demo coverage for {{topic}} when live providers are unavailable.`,
     consensusItems: [
       {
         kind: "risk",
@@ -214,10 +210,10 @@ function buildFastCandidateTwo(topic: string): CandidateModelOutput {
   };
 }
 
-function buildJudgeOutput(promptText: string, conflictIds: string[]): JudgeModelOutput {
+function buildJudgeOutput(_promptText: string, conflictIds: string[]): JudgeModelOutput {
   return {
     outputType: "judge",
-    summary: `Use a progressive drill-down workspace for ${promptText}.`,
+    summary: `Use a progressive drill-down workspace for {{topic}}.`,
     chosenApproach:
       "Keep the main view centered on the synthesis report and move raw model output into expandable run cards.",
     rationale:
@@ -252,7 +248,7 @@ export function createDefaultMockRegistry(
         modelId,
         promptTokens: 480,
         completionTokens: 168,
-        buildObject: (options) => buildStrongCandidate(extractTopicFromCandidatePrompt(extractUserPromptText(options))),
+        buildObject: () => buildStrongCandidate(),
       }),
     "fast-1": (modelId, provider) =>
       createMockLanguageModel({
@@ -261,7 +257,7 @@ export function createDefaultMockRegistry(
         promptTokens: 352,
         completionTokens: 132,
         buildObject: (options) =>
-          buildFastCandidateOne(extractTopicFromCandidatePrompt(extractUserPromptText(options))),
+          buildFastCandidateOne(),
       }),
     "fast-2": (modelId, provider) =>
       createMockLanguageModel({
@@ -270,7 +266,7 @@ export function createDefaultMockRegistry(
         promptTokens: 328,
         completionTokens: 124,
         buildObject: (options) =>
-          buildFastCandidateTwo(extractTopicFromCandidatePrompt(extractUserPromptText(options))),
+          buildFastCandidateTwo(),
       }),
     judge: (modelId, provider) =>
       createMockLanguageModel({

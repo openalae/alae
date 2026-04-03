@@ -39,6 +39,7 @@ export type RunSynthesisInput = {
   prompt: string;
   mode: SynthesisMode;
   presetId?: SynthesisPresetId;
+  language?: string;
 };
 
 export type RealProviderFactory = (modelId: string, apiKey: string) => LanguageModel;

@@ -413,7 +413,7 @@ export async function runSynthesis(
         slot,
         mode: input.mode,
         schema: CandidateModelOutputSchema,
-        system: buildCandidateSystemPrompt(slot),
+        system: buildCandidateSystemPrompt(slot, input.language),
         prompt: buildCandidateUserPrompt(prompt),
         options,
         generateId,
@@ -437,7 +437,7 @@ export async function runSynthesis(
           slot: judgeSlot,
           mode: input.mode,
           schema: JudgeModelOutputSchema,
-          system: buildJudgeSystemPrompt(),
+          system: buildJudgeSystemPrompt(input.language),
           prompt: buildJudgeUserPrompt({
             prompt,
             candidateRuns: successfulCandidateRuns,

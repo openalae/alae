@@ -130,7 +130,7 @@ function TruthPanelRunList() {
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs font-semibold capitalize shrink-0">{run.role}</span>
+                <span className="text-xs font-semibold uppercase tracking-tight shrink-0">{t(run.role)}</span>
                 <span className="text-[10px] text-muted-foreground truncate">{run.provider} / {run.model}</span>
               </div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">
@@ -192,20 +192,36 @@ function TraceEventList() {
 
   return (
     <div className="space-y-2">
-      {truthPanelSnapshot.events.map((event) => (
-        <div key={event.id} className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider ${getEventLevelClasses(event.level)}`}>
-              {event.level}
-            </span>
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{event.scope}</span>
+      {truthPanelSnapshot.events.map((event) => {
+        let content = t(event.message);
+        if (event.message.includes("{{label}}")) {
+          // Attempt to find the model info from the event scope or runs
+          const runId = event.scope.includes(":") ? event.scope.split(":")[1] : null;
+          const run = truthPanelSnapshot.runs.find(r => r.id.includes(runId || "none"));
+          const label = run ? `${t(run.role)} (${run.provider}/${run.model})` : (runId || "Unknown");
+          const provider = run?.provider || "Unknown";
+          content = t(event.message, { label, provider, id: runId, message: "" });
+        } else if (event.message.includes("{{provider}}")) {
+          const provider = event.scope.includes(":") ? event.scope.split(":")[1] : "Unknown";
+          const runId = event.scope.includes(":") ? event.scope.split(":")[1] : "Unknown";
+          content = t(event.message, { provider, id: runId });
+        }
+
+        return (
+          <div key={event.id} className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider ${getEventLevelClasses(event.level)}`}>
+                {event.level}
+              </span>
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{event.scope}</span>
+            </div>
+            <p className="mt-2 text-xs leading-5">{content}</p>
+            <div className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+              {formatTimestamp(event.occurredAt)}
+            </div>
           </div>
-          <p className="mt-2 text-xs leading-5">{event.message}</p>
-          <div className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-            {formatTimestamp(event.occurredAt)}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -265,7 +281,7 @@ export function TruthPanel() {
 
   const reportStatus = latestSynthesisReport?.status ?? "idle";
   const reportStatusLabel =
-    reportStatus === "idle" ? t("Waiting for analysis") : `${t("Latest result")} ${reportStatus}`;
+    reportStatus === "idle" ? t("Waiting for analysis") : `${t("Latest result")} [${t(reportStatus).toUpperCase()}]`;
 
   const hasValidationIssues = (truthPanelSnapshot?.validationIssues.length ?? 0) > 0;
 

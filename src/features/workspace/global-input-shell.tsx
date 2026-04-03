@@ -34,7 +34,7 @@ function PopoverPresetPicker({ controller, onClose }: { controller: WorkspaceCon
               onClick={() => controller.setSelectedPresetId(preset.id)}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-semibold">{preset.label}</div>
+                <div className="text-sm font-semibold">{t(preset.label)}</div>
                 <span className="text-[9px] uppercase tracking-widest text-muted-foreground">
                   {preset.providerSummary}
                 </span>
@@ -119,7 +119,7 @@ export function GlobalInputShell({ controller }: { controller: WorkspaceControll
                 className="text-[10px] text-primary flex items-center gap-1 hover:underline cursor-pointer"
               >
                 <Settings2 className="h-3 w-3" />
-                {synthesisPresetDefinitions.find(p => p.id === controller.selectedPresetId)?.label || "Preset"}
+                {t(synthesisPresetDefinitions.find(p => p.id === controller.selectedPresetId)?.label || "Preset")}
               </button>
               {/* Run Status Indicator — compact, near the input */}
               <div className="ml-auto">
