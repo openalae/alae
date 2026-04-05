@@ -1,405 +1,729 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Bot, ChevronUp, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, Sparkles, Waypoints } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  LoaderCircle,
+  Sparkles,
+  Waypoints,
+} from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { useSettingsStore } from "@/store/settings";
-import type { ModelRun, SynthesisReport, CandidateModelOutput, JudgeModelOutput } from "@/schema";
+import type { ConflictPoint, ConversationNode, ModelRun, SynthesisReport } from "@/schema";
 
-function renderList(items: string[], t: (key: string, options?: any) => string) {
-  if (items.length === 0) {
-    return <p className="text-sm leading-6 text-muted-foreground">{t("No items yet.")}</p>;
+type ReportTab = "summary" | "conflicts" | "directory";
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
   }
+
+  const tagName = target.tagName.toLowerCase();
   return (
-    <ul className="space-y-2">
-      {items.map((item) => {
-        let content = t(item);
-        if (item.startsWith("Unresolved conflict: ")) {
-           const question = item.replace("Unresolved conflict: ", "");
-           content = t("Unresolved conflict: {{question}}", { question });
-        }
-        return (
-          <li
-            key={item}
-            className="rounded-lg border border-border/50 bg-background/80 px-4 py-2.5 text-sm leading-6"
-          >
-            {content}
-          </li>
-        );
-      })}
-    </ul>
+    target.isContentEditable ||
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select"
   );
 }
 
-/* ─────  Accordion Section  ───── */
+function getReportStageLabel(report: SynthesisReport, t: (key: string) => string) {
+  if (report.reportStage === "awaiting_judge") return t("Awaiting judge");
+  if (report.reportStage === "judge_running") return t("Judge running");
+  if (report.reportStage === "failed") return t("Failed");
+  if (report.resolution) return t("Resolved");
+  if (report.status === "ready") return t("Ready");
+  return t("Candidate complete");
+}
 
-function AccordionSection({
-  icon,
-  title,
-  count,
-  defaultOpen = false,
-  forceOpen = false,
-  accentColor,
-  children,
-}: {
-  icon: React.ReactNode;
+function getReportStageBadgeClasses(report: SynthesisReport) {
+  if (report.reportStage === "awaiting_judge") return "badge-warning";
+  if (report.reportStage === "judge_running") return "badge-info";
+  if (report.reportStage === "failed") return "badge-error";
+  if (report.resolution || report.status === "ready") return "badge-success";
+  return "badge-neutral";
+}
+
+function formatRunStatus(status: ModelRun["status"], t: (key: string) => string) {
+  if (status === "completed") return t("Completed");
+  if (status === "running") return t("Running");
+  if (status === "pending") return t("Pending");
+  return t("Failed");
+}
+
+function getRunStatusClasses(status: ModelRun["status"]) {
+  if (status === "completed") return "badge-success";
+  if (status === "running") return "badge-info";
+  if (status === "pending") return "badge-neutral";
+  return "badge-error";
+}
+
+function getRunConversationText(run: ModelRun, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (run.parsed?.outputType === "candidate") {
+    return t(run.parsed.summary, { topic: "" });
+  }
+
+  if (run.parsed?.outputType === "judge") {
+    return [t(run.parsed.chosenApproach), t(run.parsed.summary)].filter(Boolean).join("\n\n");
+  }
+
+  return run.rawText ?? t("No content available.");
+}
+
+function buildMergedAnswerText(report: SynthesisReport, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (report.resolution) {
+    return [t(report.resolution.chosenApproach), t(report.resolution.summary)]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  return t(report.summary, { topic: report.prompt });
+}
+
+function buildQuestionOutlineTitle(prompt: string) {
+  const firstNonEmptyLine =
+    prompt
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? prompt.trim();
+
+  if (firstNonEmptyLine.length <= 72) {
+    return firstNonEmptyLine;
+  }
+
+  return `${firstNonEmptyLine.slice(0, 69).trimEnd()}...`;
+}
+
+function ConversationPanel(props: {
+  prompt: string;
   title: string;
-  count?: number;
-  defaultOpen?: boolean;
-  forceOpen?: boolean;
-  accentColor?: string;
-  children: React.ReactNode;
+  subtitle: string;
+  status: ModelRun["status"];
+  responseText: string;
+  rawText: string | null;
+  errorMessage: string | null;
+  latencyMs: number | null;
+  totalTokens: number | null;
+  tone?: "candidate" | "merged";
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen || forceOpen);
-
-  const effectiveOpen = forceOpen || isOpen;
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        className="flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-accent/30 group"
-      >
-        <span className={`transition-transform duration-200 ${effectiveOpen ? "rotate-90" : ""}`}>
-          <ChevronRight className="h-3 w-3 text-muted-foreground" />
-        </span>
-        <span className={accentColor ?? "text-muted-foreground"}>{icon}</span>
-        <span className={`text-[10px] uppercase tracking-widest font-bold ${accentColor ?? "text-muted-foreground"}`}>
-          {title}
-        </span>
-        {count !== undefined && count > 0 && (
-          <span className="text-[9px] rounded-full bg-primary/10 text-primary px-1.5 py-0.5 font-mono">
-            {count}
-          </span>
-        )}
-      </button>
-      {effectiveOpen && (
-        <div className="pl-5 pt-2 pb-1 animate-in slide-in-from-top-1 fade-in duration-200">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ParsedCandidate({ parsed }: { parsed: CandidateModelOutput }) {
-  const { t } = useTranslation();
-  return (
-    <div className="font-sans text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none text-muted-foreground">
-      <p>{t(parsed.summary, { topic: "" })}</p>
-    </div>
-  );
-}
-
-function ParsedJudge({ parsed }: { parsed: JudgeModelOutput }) {
-  const { t } = useTranslation();
-  return (
-    <div className="space-y-4 font-sans text-sm">
-      <div className="space-y-1">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-primary/70">{t("Final Decision")}</div>
-        <div className="font-medium text-foreground">{parsed.chosenApproach}</div>
-      </div>
-
-      <div className="space-y-1">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-primary/70">{t("Rationale")}</div>
-        <p className="text-muted-foreground leading-relaxed italic border-l-2 border-primary/20 pl-3">{parsed.rationale}</p>
-      </div>
-
-      <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground">
-        <p>{t(parsed.summary)}</p>
-      </div>
-    </div>
-  );
-}
-
-function ModelPanel({ run, onMinimize }: { run: ModelRun; onMinimize: () => void }) {
   const { t } = useTranslation();
   const { developerMode } = useSettingsStore();
-  const [showRaw, setShowRaw] = useState(true);
-  
+  const [showRaw, setShowRaw] = useState(false);
   const effectiveShowRaw = developerMode && showRaw;
-  const isCandidate = run.parsed?.outputType === "candidate";
-  const isJudge = run.parsed?.outputType === "judge";
+  const answerTone =
+    props.tone === "merged"
+      ? "border-primary/25 bg-primary/5"
+      : "border-border/50 bg-background/90";
 
   return (
-    <div className="flex flex-col h-full w-[400px] min-w-[400px] shrink-0 rounded-xl border border-border/40 bg-surface-container-low shadow-sm overflow-hidden relative snap-center">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/20 bg-surface-container object-contain">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
-            <Bot className="h-3 w-3" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-primary truncate">{t(run.role)}</div>
-              {developerMode && (
-                <button 
-                  onClick={() => setShowRaw(!showRaw)}
-                  className={`text-[8px] px-1.5 py-0.5 rounded font-mono font-bold uppercase transition-all select-none ${
-                    showRaw 
-                      ? "bg-primary text-primary-foreground shadow-sm" 
-                      : "bg-accent/50 text-muted-foreground hover:bg-accent hover:text-foreground border border-border/30"
-                  }`}
-                  title={showRaw ? t("Switch to Parsed View") as string : t("Switch to JSON View") as string}
-                >
-                  {showRaw ? t("JSON") : t("Parsed")}
-                </button>
-              )}
+    <article className="flex min-h-[420px] flex-col overflow-hidden rounded-[1.25rem] border border-border/40 bg-card/80 shadow-sm">
+      <header className="flex items-start justify-between gap-3 border-b border-border/30 bg-surface-container-low px-4 py-3">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              {props.tone === "merged" ? <Sparkles className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
             </div>
-            <div className="text-[9px] text-muted-foreground font-mono truncate">{run.provider} / {run.model}</div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-primary">
+                  {props.title}
+                </div>
+                <span
+                  className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider ${getRunStatusClasses(props.status)}`}
+                >
+                  {formatRunStatus(props.status, t)}
+                </span>
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {props.subtitle}
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button className="p-1 hover:bg-accent rounded text-muted-foreground transition-colors" title={t("Minimize to PIP") as string} onClick={onMinimize}>
-            <ChevronDown className="h-3.5 w-3.5" />
+
+        {developerMode ? (
+          <button
+            type="button"
+            onClick={() => setShowRaw((current) => !current)}
+            className={`rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
+              effectiveShowRaw
+                ? "border-primary/50 bg-primary text-primary-foreground"
+                : "border-border/40 bg-background/70 text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {effectiveShowRaw ? t("Parsed") : t("JSON")}
           </button>
-        </div>
-      </div>
-      
-      {/* Content */}
-      <div className={`flex-1 overflow-y-auto p-4 leading-relaxed ${effectiveShowRaw ? "whitespace-pre-wrap font-mono text-on-surface-variant bg-surface-container-lowest/50 text-xs" : "text-sm"}`}>
-        {run.error ? (
-          <div className="text-destructive font-sans font-medium mb-3 p-3 bg-destructive/10 rounded-lg">
-            <AlertTriangle className="h-4 w-4 mb-1 inline mr-2" />
-            {run.error.message}
+        ) : null}
+      </header>
+
+      <div className="flex-1 overflow-y-auto p-5">
+        {props.errorMessage ? (
+          <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {props.errorMessage}
           </div>
         ) : null}
 
         {effectiveShowRaw ? (
-          run.rawText || t("No content available.")
+          <pre className="whitespace-pre-wrap font-mono text-xs leading-6 text-muted-foreground">
+            {props.rawText ?? t("No raw output recorded.")}
+          </pre>
         ) : (
-          <>
-            {run.status === "running" && (
-              <div className="flex items-center gap-2 text-muted-foreground italic animate-pulse">
-                <Sparkles className="h-3.5 w-3.5" />
-                {t("Model is thinking...")}
+          <div className="space-y-6">
+            <section className="space-y-2">
+              <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-muted-foreground">
+                {t("Question")}
               </div>
-            )}
-            {run.status === "completed" && run.parsed && (
-              <>
-                {isCandidate && <ParsedCandidate parsed={run.parsed as CandidateModelOutput} />}
-                {isJudge && <ParsedJudge parsed={run.parsed as JudgeModelOutput} />}
-              </>
-            )}
-            {run.status === "completed" && !run.parsed && (
-              <div className="text-muted-foreground italic">
-                {t("Results are being integrated into the synthesis report.")}
+              <div className="rounded-[1.15rem] border border-border/50 bg-accent/30 px-4 py-3">
+                <div className="text-sm leading-6 text-foreground">{props.prompt}</div>
               </div>
-            )}
-            {run.status === "failed" && !run.error && (
-              <div className="text-destructive">
-                {t("An unknown error occurred during execution.")}
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.24em] text-primary/80">
+                {props.tone === "merged" ? <Sparkles className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+                <span>{props.tone === "merged" ? t("Merged answer") : t("Model reply")}</span>
               </div>
-            )}
-          </>
+              <div className={`rounded-[1.3rem] border px-5 py-5 shadow-sm ${answerTone}`}>
+                {props.status === "running" ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <LoaderCircle className="h-4 w-4 animate-spin text-primary" />
+                    {t("Model is thinking...")}
+                  </div>
+                ) : props.status === "failed" && !props.errorMessage ? (
+                  <div className="text-sm text-destructive">
+                    {t("An unknown error occurred during execution.")}
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap text-[15px] leading-8 text-foreground">
+                    {props.responseText}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
         )}
       </div>
 
-      {/* Footer / Meta */}
-      <div className="px-3 py-2 border-t border-border/20 bg-surface-container text-[9px] uppercase tracking-widest font-mono text-muted-foreground flex justify-between">
-        <span>{run.latencyMs ?? 0}ms</span>
-        <span>{run.usage.totalTokens ?? 0} {t("TOKENS")}</span>
-      </div>
-    </div>
+      <footer className="flex items-center justify-between border-t border-border/30 bg-surface-container-low px-4 py-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+        <span>{props.latencyMs ?? 0} ms</span>
+        <span>{props.totalTokens ?? 0} {t("TOKENS")}</span>
+      </footer>
+    </article>
   );
 }
 
-function PipDock({ 
-  runs, 
-  onRestore 
-}: { 
-  runs: ModelRun[]; 
-  onRestore: (runId: string) => void;
-}) {
+function ConflictList(props: { conflicts: ConflictPoint[] }) {
   const { t } = useTranslation();
-  if (runs.length === 0) return null;
+
+  if (props.conflicts.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border/50 bg-background/60 px-4 py-4 text-sm text-muted-foreground">
+        {t("No cross-model conflicts were detected for this run.")}
+      </div>
+    );
+  }
 
   return (
-    <div className="absolute right-4 top-20 flex flex-col gap-2 z-40 pointer-events-none">
-      {runs.map(run => (
-        <button
-          key={run.id}
-          onClick={() => onRestore(run.id)}
-          className="pointer-events-auto flex items-center gap-3 w-48 bg-surface-container-high/90 backdrop-blur border border-border/40 shadow-xl rounded-lg p-2 hover:bg-accent transition-all hover:scale-105 active:scale-95 group"
+    <div className="space-y-3">
+      {props.conflicts.map((conflict) => (
+        <section
+          key={conflict.id}
+          className="breathing-critical rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-4"
         >
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
-            <Bot className="h-4 w-4" />
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-sm font-semibold text-foreground">{t(conflict.title)}</h4>
+            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300">
+              {t(conflict.severity)}
+            </span>
           </div>
-          <div className="min-w-0 flex-1 text-left">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-foreground truncate">{t(run.role)}</div>
-            <div className="text-[9px] text-muted-foreground font-mono truncate">{run.model}</div>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{t(conflict.summary)}</p>
+          <p className="mt-3 text-sm font-medium text-foreground">{t(conflict.question)}</p>
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+            {conflict.positions.map((position) => (
+              <div
+                key={`${conflict.id}-${position.modelRunId}`}
+                className="rounded-xl border border-border/50 bg-background/80 px-3 py-3"
+              >
+                <div className="text-xs font-semibold text-foreground">{t(position.label)}</div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t(position.stance)}</p>
+              </div>
+            ))}
           </div>
-          <ChevronUp className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
-        </button>
+        </section>
       ))}
     </div>
   );
 }
 
-export function SynthesisReportSplitView({ report }: { report: SynthesisReport }) {
+function OutlineLink(props: {
+  indexLabel: string;
+  title: string;
+  description?: string;
+  active?: boolean;
+  indent?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className={`flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
+        props.active
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+      } ${props.indent ? "ml-5 w-[calc(100%-1.25rem)]" : ""}`}
+    >
+      <span className="mt-0.5 min-w-7 font-mono text-[10px] uppercase tracking-[0.24em]">
+        {props.indexLabel}
+      </span>
+      <span className="min-w-0 space-y-0.5">
+        <span className="block text-sm font-medium">{props.title}</span>
+        {props.description ? (
+          <span className="block text-xs leading-5 text-muted-foreground">
+            {props.description}
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+function MergedAnswerPanel(props: { report: SynthesisReport }) {
   const { t } = useTranslation();
-  const [minimizedIds, setMinimizedIds] = useState<Set<string>>(new Set());
-
-  const activeRuns = useMemo(() => {
-    return report.modelRuns.filter(r => !minimizedIds.has(r.id));
-  }, [report.modelRuns, minimizedIds]);
-
-  const pipRuns = useMemo(() => {
-    return report.modelRuns.filter(r => minimizedIds.has(r.id));
-  }, [report.modelRuns, minimizedIds]);
-
-  const handleMinimize = (id: string) => {
-    setMinimizedIds(prev => new Set([...prev, id]));
-  };
-
-  const handleRestore = (id: string) => {
-    setMinimizedIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  };
-
-  const hasConflicts = report.conflicts.length > 0;
-  const consensusCount = report.consensus?.items.length ?? 0;
-  const conflictCount = report.conflicts.length;
-  const nextActionCount = report.nextActions?.length ?? 0;
 
   return (
-    <div className="h-full w-full flex flex-col relative">
-      <PipDock runs={pipRuns} onRestore={handleRestore} />
-      
-      <div className="flex-1 w-full overflow-x-auto flex gap-4 p-4 snap-x snap-mandatory">
-        {/* Synthesis Dashboard Panel (Summary, Conflicts, etc) — now with accordion */}
-        <div className="flex flex-col h-full w-[400px] min-w-[400px] shrink-0 rounded-xl border border-primary/20 bg-primary/5 shadow-sm overflow-hidden snap-center">
-          <div className="px-4 py-3 border-b border-primary/10 bg-primary/10 font-bold text-xs uppercase tracking-widest text-primary flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4" /> 
-            {t("Synthesis Report")}
+    <ConversationPanel
+      prompt={props.report.prompt}
+      title={t("Merged answer")}
+      subtitle={props.report.resolution ? t("Unified response") : t("Final answer")}
+      status="completed"
+      responseText={buildMergedAnswerText(props.report, t)}
+      rawText={null}
+      errorMessage={null}
+      latencyMs={null}
+      totalTokens={null}
+      tone="merged"
+    />
+  );
+}
+
+function DirectoryPanel(props: {
+  outlineNodes: ConversationNode[];
+  activeNodeId: string | null;
+  onSelectNode: (nodeId: string) => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <section className="rounded-2xl border border-border/50 bg-card/60 p-4">
+      <div className="flex items-center gap-2">
+        <Waypoints className="h-4 w-4 text-primary" />
+        <h4 className="text-sm font-semibold">{t("Directory")}</h4>
+      </div>
+
+      <div className="mt-4 space-y-1">
+        {props.outlineNodes.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border/50 bg-background/60 px-4 py-4 text-sm text-muted-foreground">
+            {t("No items yet.")}
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {/* Summary — default OPEN */}
-            <AccordionSection
-              icon={<Sparkles className="h-3 w-3" />}
-              title={t("Summary")}
-              defaultOpen={true}
-              accentColor="text-primary"
+        ) : null}
+
+        {props.outlineNodes.map((node, index) => (
+          <OutlineLink
+            key={node.id}
+            indexLabel={String(index + 1).padStart(2, "0")}
+            title={buildQuestionOutlineTitle(node.prompt)}
+            active={props.activeNodeId === node.id}
+            onClick={() => props.onSelectNode(node.id)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReportTopBar(props: {
+  report: SynthesisReport;
+  candidateRuns: ModelRun[];
+  outlineNodes: ConversationNode[];
+  activeOutlineNodeId: string | null;
+  onSelectOutlineNode: (nodeId: string) => void;
+  activeTab: ReportTab;
+  onChangeTab: (tab: ReportTab) => void;
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
+  onResolve: () => void;
+  isBusy: boolean;
+  hasMergedView: boolean;
+  showSourcePanels: boolean;
+  onToggleSourcePanels: () => void;
+  quickHints: string[];
+}) {
+  const { t } = useTranslation();
+
+  const tabs: Array<{ id: ReportTab; label: string; count?: number }> = [
+    { id: "summary", label: t("Summary") },
+    { id: "conflicts", label: t("Conflicts"), count: props.report.conflicts.length },
+    { id: "directory", label: t("Directory") },
+  ];
+
+  return (
+    <section className="rounded-[1.4rem] border border-border/40 bg-card/80 shadow-sm">
+      <div className="flex flex-col gap-4 px-5 py-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                {t("Synthesis Report")}
+              </div>
+              <span
+                className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider ${getReportStageBadgeClasses(props.report)}`}
+              >
+                {getReportStageLabel(props.report, t)}
+              </span>
+              <span className="inline-flex rounded-full border border-border/50 bg-background/80 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                {props.candidateRuns.length} {t("Candidate windows")}
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold tracking-tight text-foreground">
+                {t(props.report.summary, { topic: props.report.prompt })}
+              </h3>
+              <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
+                {props.report.resolution
+                  ? t(props.report.resolution.chosenApproach)
+                  : t(props.report.summary, { topic: props.report.prompt })}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {props.hasMergedView ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={props.onToggleSourcePanels}
+              >
+                {props.showSourcePanels ? t("Focus merged answer") : t("Compare source models")}
+              </Button>
+            ) : null}
+
+            {props.report.reportStage === "awaiting_judge" ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={props.isBusy}
+                onClick={props.onResolve}
+                className="gap-2"
+              >
+                {props.isBusy ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                )}
+                {t("Resolve with AI Judge")}
+              </Button>
+            ) : null}
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={props.onToggleExpanded}
+              className="gap-2"
             >
-              <div className="text-sm leading-relaxed">{t(report.summary, { topic: report.prompt })}</div>
-            </AccordionSection>
-
-            {/* Consensus — default CLOSED */}
-            {report.consensus && report.consensus.items.length > 0 && (
-              <AccordionSection
-                icon={<Waypoints className="h-3 w-3" />}
-                title={t("Consensus")}
-                count={consensusCount}
-                accentColor="text-primary"
-              >
-                <div className="text-sm text-muted-foreground mb-2">
-                  {t(report.consensus.summary, { 
-                    count: report.modelRuns.filter(r => r.role !== 'judge' && r.status === 'completed').length,
-                    itemCount: report.consensus.items.length,
-                    runCount: report.modelRuns.filter(r => r.role !== 'judge' && r.status === 'completed').length
-                  })}
-                </div>
-                <ul className="space-y-2">
-                  {report.consensus.items.map((item) => (
-                    <li key={item.id} className="rounded-lg border border-border/50 bg-background/80 px-3 py-2 text-xs leading-6">
-                      <div className="font-medium">{t(item.statement)}</div>
-                      <div className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">
-                        {t(item.kind)} · {t(item.confidence)} {t("confidence")} · {item.supportingRunIds.length} {t("supporting runs")}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </AccordionSection>
-            )}
-            
-            {/* Conflicts — auto-OPEN when present */}
-            {report.conflicts.length > 0 && (
-              <AccordionSection
-                icon={<AlertTriangle className="h-3 w-3" />}
-                title={t("Conflicts Detected")}
-                count={conflictCount}
-                forceOpen={hasConflicts}
-                accentColor="text-destructive"
-              >
-                <div className="space-y-3">
-                  {report.conflicts.map(c => (
-                    <div key={c.id} className="breathing-critical p-3 rounded-lg bg-background border border-destructive/30 text-xs">
-                      <div className="font-semibold text-destructive mb-1">{t(c.title)}</div>
-                      <div className="text-muted-foreground leading-relaxed">{t(c.summary)}</div>
-                      <div className="mt-2 text-sm font-medium">{t(c.question)}</div>
-                      <ul className="mt-2 space-y-2">
-                        {c.positions.map((position) => (
-                          <li key={`${c.id}-${position.modelRunId}`} className="rounded-md border border-border/50 bg-card/60 px-2 py-1.5 text-xs">
-                            <div className="font-medium">{t(position.label)}</div>
-                            <div className="mt-0.5">{t(position.stance)}</div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </AccordionSection>
-            )}
-
-            {/* Resolution — default CLOSED */}
-            {report.resolution && (
-              <AccordionSection
-                icon={<Bot className="h-3 w-3" />}
-                title={t("Resolution")}
-                accentColor="text-primary"
-              >
-                <div className="rounded-lg border border-border/50 bg-background/80 p-3 text-xs">
-                  <div className="font-medium">
-                    {(() => {
-                      const approach = report.resolution.chosenApproach;
-                      return t(approach);
-                    })()}
-                  </div>
-                  <div className="mt-2 text-muted-foreground">
-                    {(() => {
-                      const rationale = report.resolution.rationale;
-                      if (rationale.includes("{{label}}")) {
-                        const sourceRun = report.modelRuns.find(r => r.id === report.resolution?.judgeModelRunId);
-                        const label = sourceRun ? `${t(sourceRun.role)}:${sourceRun.provider}/${sourceRun.model}` : "Expert";
-                        return t(rationale, { label });
-                      }
-                      return t(rationale);
-                    })()}
-                  </div>
-                </div>
-                {report.resolution.openRisks.length > 0 ? (
-                  <div className="mt-3">
-                    <div className="text-[9px] uppercase tracking-widest text-muted-foreground mb-1">{t("Open risks")}</div>
-                    {renderList(report.resolution.openRisks, t)}
-                  </div>
-                ) : null}
-              </AccordionSection>
-            )}
-
-            {/* Next Actions — default CLOSED */}
-            {report.nextActions && report.nextActions.length > 0 && (
-              <AccordionSection
-                icon={<Sparkles className="h-3 w-3" />}
-                title={t("Next actions")}
-                count={nextActionCount}
-                accentColor="text-primary"
-              >
-                {renderList(report.nextActions, t)}
-              </AccordionSection>
-            )}
-
+              {props.isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              {props.isExpanded ? t("Collapse report") : t("Expand report")}
+            </Button>
           </div>
         </div>
 
-        {/* Model Execution Panels */}
-        {activeRuns.map((run) => (
-          <ModelPanel key={run.id} run={run} onMinimize={() => handleMinimize(run.id)} />
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/30 pt-3">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => props.onChangeTab(tab.id)}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                props.activeTab === tab.id
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border/50 bg-background/70 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+              {tab.count !== undefined ? (
+                <span className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {tab.count}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          <span>{t("Quick keys")}</span>
+          {props.quickHints.map((hint) => (
+            <span
+              key={hint}
+              className="rounded-full border border-border/40 bg-background/70 px-2.5 py-1"
+            >
+              {hint}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {props.isExpanded ? (
+        <div className="border-t border-border/30 px-5 py-4">
+          {props.activeTab === "summary" ? (
+            <div className="grid gap-4 lg:grid-cols-[0.95fr,1.05fr]">
+              <section className="rounded-2xl border border-border/50 bg-background/70 p-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  <h4 className="text-sm font-semibold">{t("Consensus")}</h4>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {props.report.consensus?.items.length ? (
+                    props.report.consensus.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="rounded-xl border border-border/50 bg-card/80 px-4 py-3"
+                      >
+                        <div className="font-medium text-foreground">{t(item.statement)}</div>
+                        <div className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                          {t(item.kind)} · {t(item.confidence)} {t("confidence")}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border/50 bg-card/60 px-4 py-4 text-sm text-muted-foreground">
+                      {t("No consensus items were extracted for this run.")}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-border/50 bg-background/70 p-4">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <h4 className="text-sm font-semibold">{t("Conflicts")}</h4>
+                </div>
+                <div className="mt-3">
+                  <ConflictList conflicts={props.report.conflicts} />
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {props.activeTab === "conflicts" ? <ConflictList conflicts={props.report.conflicts} /> : null}
+
+          {props.activeTab === "directory" ? (
+            <DirectoryPanel
+              outlineNodes={props.outlineNodes}
+              activeNodeId={props.activeOutlineNodeId}
+              onSelectNode={props.onSelectOutlineNode}
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+export function SynthesisReportSplitView(props: {
+  report: SynthesisReport;
+  onResolve: () => void;
+  isBusy: boolean;
+  conversationOutlineNodes?: ConversationNode[];
+  activeOutlineNodeId?: string | null;
+  onSelectOutlineNode?: (nodeId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const candidateRuns = useMemo(
+    () => props.report.modelRuns.filter((run) => run.role !== "judge"),
+    [props.report.modelRuns],
+  );
+  const hasMergedView = candidateRuns.length > 1 && props.report.resolution !== null;
+  const [activeTab, setActiveTab] = useState<ReportTab>(
+    props.report.conflicts.length > 0 ? "conflicts" : "summary",
+  );
+  const [isExpanded, setIsExpanded] = useState(
+    props.report.reportStage === "awaiting_judge" || props.report.reportStage === "failed",
+  );
+  const [showSourcePanels, setShowSourcePanels] = useState(!hasMergedView);
+  const [activePanelIndex, setActivePanelIndex] = useState(0);
+  const panelRefs = useRef<Array<HTMLDivElement | null>>([]);
+
+  useEffect(() => {
+    setActiveTab(props.report.conflicts.length > 0 ? "conflicts" : "summary");
+    setIsExpanded(props.report.reportStage === "awaiting_judge" || props.report.reportStage === "failed");
+    setShowSourcePanels(!hasMergedView);
+    setActivePanelIndex(0);
+  }, [props.report.id, props.report.reportStage, props.report.conflicts.length, hasMergedView]);
+
+  const focusPanel = (index: number) => {
+    const panel = panelRefs.current[index];
+
+    if (!panel) {
+      return;
+    }
+
+    setActivePanelIndex(index);
+    panel.focus();
+    panel.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  };
+
+  const openTab = (tab: ReportTab) => {
+    setActiveTab(tab);
+    setIsExpanded(true);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isEditableTarget(event.target)) {
+        return;
+      }
+
+      const hasModifier = event.metaKey || event.ctrlKey;
+
+      if (hasModifier && event.shiftKey) {
+        const key = event.key.toLowerCase();
+
+        if (key === "s") {
+          event.preventDefault();
+          openTab("summary");
+          return;
+        }
+
+        if (key === "o") {
+          event.preventDefault();
+          openTab("directory");
+          return;
+        }
+
+        if (key === "r") {
+          event.preventDefault();
+          if (props.report.reportStage === "awaiting_judge" && !props.isBusy) {
+            props.onResolve();
+            return;
+          }
+
+          openTab("conflicts");
+        }
+      }
+
+      if (hasModifier && !event.shiftKey && /^[1-3]$/u.test(event.key)) {
+        const panelIndex = Number(event.key) - 1;
+
+        if (panelIndex < panelRefs.current.length) {
+          event.preventDefault();
+          focusPanel(panelIndex);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    props.onResolve,
+    props.isBusy,
+    props.report.reportStage,
+    candidateRuns.length,
+    hasMergedView,
+    showSourcePanels,
+  ]);
+
+  const renderedPanels =
+    hasMergedView && !showSourcePanels
+      ? [
+          {
+            id: `${props.report.id}-merged`,
+            content: <MergedAnswerPanel report={props.report} />,
+            label: t("Merged answer"),
+          },
+        ]
+      : candidateRuns.map((run, index) => ({
+          id: run.id,
+          content: (
+            <ConversationPanel
+              prompt={props.report.prompt}
+              title={t(run.role)}
+              subtitle={`${run.provider} / ${run.model}`}
+              status={run.status}
+              responseText={getRunConversationText(run, t)}
+              rawText={run.rawText}
+              errorMessage={run.error?.message ?? null}
+              latencyMs={run.latencyMs}
+              totalTokens={run.usage.totalTokens}
+            />
+          ),
+          label: `${t("Pane")} ${index + 1}: ${t(run.role)} ${run.provider}/${run.model}`,
+        }));
+
+  const gridClassName =
+    renderedPanels.length >= 3
+      ? "xl:grid-cols-3"
+      : renderedPanels.length === 2
+        ? "lg:grid-cols-2"
+        : "grid-cols-1";
+
+  const quickHints = [
+    `${t("Summary")} · Cmd/Ctrl+Shift+S`,
+    `${props.report.reportStage === "awaiting_judge" ? t("Resolve with AI Judge") : t("Conflicts")} · Cmd/Ctrl+Shift+R`,
+    `${t("Directory")} · Cmd/Ctrl+Shift+O`,
+    `Pane · Cmd/Ctrl+1-3`,
+  ];
+
+  const handleSelectOutlineNode = (nodeId: string) => {
+    props.onSelectOutlineNode?.(nodeId);
+    setIsExpanded(false);
+  };
+
+  return (
+    <div className="space-y-4 px-4 md:px-8">
+      <ReportTopBar
+        report={props.report}
+        candidateRuns={candidateRuns}
+        outlineNodes={props.conversationOutlineNodes ?? []}
+        activeOutlineNodeId={props.activeOutlineNodeId ?? null}
+        onSelectOutlineNode={handleSelectOutlineNode}
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+        isExpanded={isExpanded}
+        onToggleExpanded={() => setIsExpanded((current) => !current)}
+        onResolve={props.onResolve}
+        isBusy={props.isBusy}
+        hasMergedView={hasMergedView}
+        showSourcePanels={showSourcePanels}
+        onToggleSourcePanels={() => setShowSourcePanels((current) => !current)}
+        quickHints={quickHints}
+      />
+
+      <div className={`grid gap-4 ${gridClassName}`}>
+        {renderedPanels.map((panel, index) => (
+          <div
+            key={panel.id}
+            ref={(node) => {
+              panelRefs.current[index] = node;
+            }}
+            tabIndex={-1}
+            onClick={() => focusPanel(index)}
+            onFocus={() => setActivePanelIndex(index)}
+            aria-label={panel.label}
+            className={`rounded-[1.35rem] transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+              activePanelIndex === index ? "ring-2 ring-primary/30 ring-offset-0" : ""
+            }`}
+          >
+            {panel.content}
+          </div>
         ))}
-        
-        {/* Fill empty space if few models so it aligns well */}
-        <div className="w-8 shrink-0" />
       </div>
     </div>
   );

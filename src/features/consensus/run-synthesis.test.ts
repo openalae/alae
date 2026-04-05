@@ -467,6 +467,7 @@ describe("runSynthesis orchestration", () => {
       {
         prompt,
         mode: "real",
+        presetId: "crossVendorDefault",
       },
       {
         generateId: createIdGenerator(),
@@ -489,6 +490,7 @@ describe("runSynthesis orchestration", () => {
       {
         prompt,
         mode: "mock",
+        presetId: "crossVendorDefault",
       },
       {
         generateId: createIdGenerator(),
@@ -670,10 +672,10 @@ describe("runSynthesis orchestration", () => {
     );
 
     expect(result.report.status).toBe("failed");
+    expect(result.report.reportStage).toBe("failed");
+    expect(result.report.judgeStatus).toBe("not_needed");
     expect(result.report.resolution).toBeNull();
     expect(result.report.modelRuns.some(isCompletedCandidateRun)).toBe(false);
-    expect(result.report.modelRuns[result.report.modelRuns.length - 1]?.error?.code).toBe(
-      "SKIPPED_NO_CANDIDATE_SUCCESS",
-    );
+    expect(result.report.modelRuns).toHaveLength(3);
   });
 });

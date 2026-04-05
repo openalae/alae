@@ -32,4 +32,20 @@ export const LocalProviderStatusesSchema = z
   })
   .strict();
 
+export const LocalProviderModelSchema = z
+  .object({
+    id: z.string().trim().min(1),
+    modelId: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    sizeBytes: z.number().nonnegative().nullable(),
+    modifiedAt: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict();
+
+export const LocalProviderModelsSchema = z
+  .object({
+    ollama: z.array(LocalProviderModelSchema).optional(),
+  })
+  .strict();
+
 export const ApiKeyValueSchema = z.string().min(1).nullable();

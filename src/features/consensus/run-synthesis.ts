@@ -6,15 +6,16 @@ import {
 } from "ai";
 import { z } from "zod";
 
-import { getProviderFactory } from "@/features/consensus/provider-registry";
-import { getSynthesisPreset } from "@/features/consensus/presets";
+import { buildExecutionPlanFromPreset } from "@/features/consensus/presets";
 import {
   buildCandidateSystemPrompt,
   buildCandidateUserPrompt,
   buildJudgeSystemPrompt,
   buildJudgeUserPrompt,
 } from "@/features/consensus/prompts";
+import { getProviderFactory } from "@/features/consensus/provider-registry";
 import {
+  buildCandidateResolution,
   buildFallbackResolution,
   buildNextActions,
   buildResolutionFromJudge,
@@ -29,6 +30,8 @@ import {
   isCompletedJudgeRun,
 } from "@/features/consensus/pure";
 import type {
+  ExecutionPlan,
+  RunJudgeOnlyInput,
   RunSynthesisInput,
   RunSynthesisOptions,
   SlotExecution,
@@ -53,7 +56,6 @@ const missingApiKeyCode = "MISSING_API_KEY";
 const missingMockModelCode = "MISSING_MOCK_MODEL";
 const schemaValidationFailedCode = "SCHEMA_VALIDATION_FAILED";
 const modelCallFailedCode = "MODEL_CALL_FAILED";
-const skippedNoCandidateSuccessCode = "SKIPPED_NO_CANDIDATE_SUCCESS";
 
 type ResolvedModelResult =
   | {
@@ -361,60 +363,146 @@ async function executeStructuredRun<T extends CandidateModelOutput | JudgeModelO
   }
 }
 
-function createSkippedJudgeRun(input: {
-  slot: SynthesisModelSlot;
-  generateId: () => string;
-  currentDate: () => Date;
-}) {
-  const startedAt = input.currentDate();
-  const completedAt = input.currentDate();
-
-  return buildFailedRun({
-    slot: input.slot,
-    runId: `run-${input.slot.id}-${input.generateId()}`,
-    startedAt,
-    completedAt,
-    errorMessage: "Judge run skipped because no candidate run completed successfully.",
-    errorCode: skippedNoCandidateSuccessCode,
-    retryable: false,
-    validation: buildPendingValidation(),
-  });
-}
-
 function selectFallbackSource(candidateRuns: ModelRun[]) {
   return (
-    candidateRuns.find(
-      (run) => run.role === "strong" && isCompletedCandidateRun(run),
-    ) ?? candidateRuns.find(isCompletedCandidateRun)
+    candidateRuns.find((run) => run.role === "strong" && isCompletedCandidateRun(run)) ??
+    candidateRuns.find(isCompletedCandidateRun)
   );
 }
 
-export async function runSynthesis(
-  input: RunSynthesisInput,
-  options: RunSynthesisOptions = {},
-): Promise<SynthesisExecutionResult> {
-  const generateId = options.generateId ?? createDefaultId;
-  const currentDate = options.currentDate ?? (() => new Date());
-  const prompt = NonEmptyStringSchema.parse(input.prompt);
-  const preset = getSynthesisPreset(input.presetId ?? "crossVendorDefault");
-  const reportId = `report-${generateId()}`;
-  const createdAt = toIsoDatetime(currentDate());
-
-  const candidateSlots = preset.slots.filter((slot) => slot.outputType === "candidate");
-  const judgeSlot = preset.slots.find((slot) => slot.outputType === "judge");
-
-  if (!judgeSlot) {
-    throw new Error("The synthesis preset is missing a judge slot.");
+function getCandidateMode(candidateCount: number): "single" | "dual" | "multi" {
+  if (candidateCount <= 1) {
+    return "single";
   }
 
-  const candidateRuns: ModelRun[] = await Promise.all(
+  return candidateCount === 2 ? "dual" : "multi";
+}
+
+function resolveExecutionPlan(input: {
+  executionPlan?: ExecutionPlan;
+  presetId?: RunSynthesisInput["presetId"];
+  judgeMode?: RunSynthesisInput["judgeMode"];
+}) {
+  if (input.executionPlan) {
+    return input.executionPlan;
+  }
+
+  return buildExecutionPlanFromPreset(
+    input.presetId ?? "crossVendorDefault",
+    input.judgeMode ?? "auto",
+  );
+}
+
+function buildCandidateSlotExecutions(candidateSlots: readonly SynthesisModelSlot[], runs: ModelRun[]) {
+  return candidateSlots.map<SlotExecution>((slot, index) => ({
+    slot,
+    run: runs[index] ?? runs[0],
+  }));
+}
+
+async function runSingleMode(
+  input: RunSynthesisInput & {
+    prompt: string;
+    reportId: string;
+    createdAt: string;
+    executionPlan: ExecutionPlan;
+  },
+  options: RunSynthesisOptions,
+  generateId: () => string,
+  currentDate: () => Date,
+): Promise<SynthesisExecutionResult> {
+  const candidateSlot = input.executionPlan.candidateSlots[0];
+
+  if (!candidateSlot) {
+    throw new Error("Single-model execution requires one candidate slot.");
+  }
+
+  const candidateRun = await executeStructuredRun({
+    slot: candidateSlot,
+    mode: input.mode,
+    schema: CandidateModelOutputSchema,
+    system: buildCandidateSystemPrompt(candidateSlot, input.language),
+    prompt: buildCandidateUserPrompt(input.prompt),
+    options,
+    generateId,
+    currentDate,
+  });
+
+  const completedCandidate = isCompletedCandidateRun(candidateRun) ? candidateRun : null;
+  const resolution = completedCandidate
+    ? {
+        summary: completedCandidate.parsed.summary,
+        rationale: "Single-model mode — no comparison was performed.",
+        chosenApproach:
+          completedCandidate.parsed.consensusItems[0]?.statement ??
+          completedCandidate.parsed.summary,
+        resolvedConflictIds: [],
+        judgeModelRunId: completedCandidate.id,
+        openRisks: [],
+      }
+    : null;
+  const allRuns = [candidateRun];
+  const status = completedCandidate ? "ready" : "failed";
+
+  const report = SynthesisReportSchema.parse(
+    buildSynthesisReport({
+      id: input.reportId,
+      prompt: input.prompt,
+      summary: resolution?.summary ?? createDefaultFailureSummary(),
+      status,
+      candidateMode: "single",
+      pendingJudge: false,
+      reportStage: completedCandidate ? "resolved" : "failed",
+      judgeStatus: "not_needed",
+      executionPlan: input.executionPlan,
+      consensusItems: [],
+      successfulCandidateCount: completedCandidate ? 1 : 0,
+      conflicts: [],
+      resolution,
+      nextActions: completedCandidate ? completedCandidate.parsed.recommendedActions : [],
+      modelRuns: allRuns,
+      createdAt: input.createdAt,
+    }),
+  );
+
+  const truthPanelSnapshot = TruthPanelSnapshotSchema.parse(
+    buildTruthPanelSnapshot({
+      runs: allRuns,
+      reportId: report.id,
+      generatedAt: report.createdAt,
+      events: buildTraceEvents({
+        slotExecutions: [{ slot: candidateSlot, run: candidateRun }],
+        generatedAt: report.createdAt,
+        generateId,
+        usedFallbackResolution: false,
+      }),
+    }),
+  );
+
+  return { report, truthPanelSnapshot };
+}
+
+async function runMultiCandidateMode(
+  input: RunSynthesisInput & {
+    prompt: string;
+    reportId: string;
+    createdAt: string;
+    candidateMode: "dual" | "multi";
+    executionPlan: ExecutionPlan;
+  },
+  options: RunSynthesisOptions,
+  generateId: () => string,
+  currentDate: () => Date,
+): Promise<SynthesisExecutionResult> {
+  const { candidateSlots, judgeSlot } = input.executionPlan;
+  const candidateRuns = await Promise.all(
     candidateSlots.map((slot) =>
       executeStructuredRun({
         slot,
         mode: input.mode,
         schema: CandidateModelOutputSchema,
         system: buildCandidateSystemPrompt(slot, input.language),
-        prompt: buildCandidateUserPrompt(prompt),
+        prompt: buildCandidateUserPrompt(input.prompt),
         options,
         generateId,
         currentDate,
@@ -425,89 +513,104 @@ export async function runSynthesis(
   const successfulCandidateRuns = candidateRuns.filter(isCompletedCandidateRun);
   const consensusItems = extractConsensusItems(candidateRuns, { generateId });
   const conflicts = extractConflictPoints(candidateRuns, { generateId });
+  const hasConflicts = conflicts.length > 0;
+  const deferJudge = input.executionPlan.conflictMode === "manual" && hasConflicts;
+  const fallbackSource = selectFallbackSource(candidateRuns);
 
-  const judgeRun: ModelRun =
-    successfulCandidateRuns.length === 0
-      ? createSkippedJudgeRun({
-          slot: judgeSlot,
-          generateId,
-          currentDate,
-        })
-      : await executeStructuredRun({
-          slot: judgeSlot,
-          mode: input.mode,
-          schema: JudgeModelOutputSchema,
-          system: buildJudgeSystemPrompt(input.language),
-          prompt: buildJudgeUserPrompt({
-            prompt,
-            candidateRuns: successfulCandidateRuns,
-            consensusItems,
-            conflicts,
-          }),
-          options,
-          generateId,
-          currentDate,
-        });
-
+  let judgeRun: ModelRun | null = null;
   let usedFallbackResolution = false;
-  let resolution = isCompletedJudgeRun(judgeRun)
-    ? buildResolutionFromJudge({
-        judgeRun,
+  let resolution =
+    !hasConflicts && fallbackSource && isCompletedCandidateRun(fallbackSource)
+      ? buildCandidateResolution({ sourceRun: fallbackSource })
+      : null;
+
+  if (successfulCandidateRuns.length > 0 && hasConflicts && !deferJudge) {
+    if (!judgeSlot) {
+      throw new Error("The execution plan is missing a judge slot for conflict resolution.");
+    }
+
+    judgeRun = await executeStructuredRun({
+      slot: judgeSlot,
+      mode: input.mode,
+      schema: JudgeModelOutputSchema,
+      system: buildJudgeSystemPrompt(input.language),
+      prompt: buildJudgeUserPrompt({
+        prompt: input.prompt,
+        candidateRuns: successfulCandidateRuns,
+        consensusItems,
         conflicts,
-      })
-    : null;
+      }),
+      options,
+      generateId,
+      currentDate,
+    });
 
-  if (resolution === null && successfulCandidateRuns.length > 0) {
-    const fallbackSource = selectFallbackSource(candidateRuns);
+    resolution = isCompletedJudgeRun(judgeRun)
+      ? buildResolutionFromJudge({ judgeRun, conflicts })
+      : null;
 
-    if (fallbackSource && isCompletedCandidateRun(fallbackSource)) {
+    if (resolution === null && fallbackSource && isCompletedCandidateRun(fallbackSource)) {
       usedFallbackResolution = true;
-      resolution = buildFallbackResolution({
-        sourceRun: fallbackSource,
-        conflicts,
-      });
+      resolution = buildFallbackResolution({ sourceRun: fallbackSource, conflicts });
     }
   }
 
-  const allRuns = [...candidateRuns, judgeRun];
+  const allRuns = judgeRun ? [...candidateRuns, judgeRun] : [...candidateRuns];
   const status =
-    successfulCandidateRuns.length === 0 || resolution === null
+    successfulCandidateRuns.length === 0
       ? "failed"
-      : allRuns.every((run) => run.status === "completed") && !usedFallbackResolution
-        ? "ready"
-        : "partial";
+      : hasConflicts && deferJudge
+        ? "partial"
+        : resolution === null
+          ? "failed"
+          : allRuns.every((run) => run.status === "completed") && !usedFallbackResolution
+            ? "ready"
+            : "partial";
 
-  const nextActions =
-    status === "failed" ? [] : buildNextActions(successfulCandidateRuns, resolution);
+  const reportStage =
+    status === "failed"
+      ? "failed"
+      : hasConflicts && deferJudge
+        ? "awaiting_judge"
+        : "resolved";
+  const judgeStatus =
+    !hasConflicts
+      ? "not_needed"
+      : deferJudge
+        ? "pending"
+        : judgeRun && isCompletedJudgeRun(judgeRun)
+          ? "completed"
+          : "failed";
   const summary =
-    status === "failed" || resolution === null ? createDefaultFailureSummary() : resolution.summary;
+    reportStage === "awaiting_judge" && fallbackSource && isCompletedCandidateRun(fallbackSource)
+      ? fallbackSource.parsed.summary
+      : resolution?.summary ?? createDefaultFailureSummary();
+  const nextActions = status === "failed" ? [] : buildNextActions(successfulCandidateRuns, resolution);
+  const slotExecutions = buildCandidateSlotExecutions(candidateSlots, candidateRuns);
+  if (judgeSlot && judgeRun) {
+    slotExecutions.push({ slot: judgeSlot, run: judgeRun });
+  }
 
   const report = SynthesisReportSchema.parse(
     buildSynthesisReport({
-      id: reportId,
-      prompt,
+      id: input.reportId,
+      prompt: input.prompt,
       summary,
       status,
+      candidateMode: input.candidateMode,
+      pendingJudge: deferJudge,
+      reportStage,
+      judgeStatus,
+      executionPlan: input.executionPlan,
       consensusItems,
       successfulCandidateCount: successfulCandidateRuns.length,
       conflicts,
       resolution,
       nextActions,
       modelRuns: allRuns,
-      createdAt,
+      createdAt: input.createdAt,
     }),
   );
-
-  const slotExecutions: SlotExecution[] = [
-    ...candidateSlots.map((slot, index) => ({
-      slot,
-      run: candidateRuns[index],
-    })),
-    {
-      slot: judgeSlot,
-      run: judgeRun,
-    },
-  ];
 
   const truthPanelSnapshot = TruthPanelSnapshotSchema.parse(
     buildTruthPanelSnapshot({
@@ -523,8 +626,155 @@ export async function runSynthesis(
     }),
   );
 
-  return {
-    report,
-    truthPanelSnapshot,
-  };
+  return { report, truthPanelSnapshot };
+}
+
+export async function runSynthesis(
+  input: RunSynthesisInput,
+  options: RunSynthesisOptions = {},
+): Promise<SynthesisExecutionResult> {
+  const generateId = options.generateId ?? createDefaultId;
+  const currentDate = options.currentDate ?? (() => new Date());
+  const prompt = NonEmptyStringSchema.parse(input.prompt);
+  const executionPlan = resolveExecutionPlan(input);
+  const reportId = `report-${generateId()}`;
+  const createdAt = toIsoDatetime(currentDate());
+  const candidateCount = executionPlan.candidateSlots.length;
+
+  if (candidateCount === 1) {
+    return runSingleMode(
+      { ...input, prompt, reportId, createdAt, executionPlan },
+      options,
+      generateId,
+      currentDate,
+    );
+  }
+
+  return runMultiCandidateMode(
+    {
+      ...input,
+      prompt,
+      reportId,
+      createdAt,
+      executionPlan,
+      candidateMode: candidateCount === 2 ? "dual" : "multi",
+    },
+    options,
+    generateId,
+    currentDate,
+  );
+}
+
+export async function runJudgeOnly(
+  input: RunJudgeOnlyInput,
+  options: RunSynthesisOptions = {},
+): Promise<SynthesisExecutionResult> {
+  const generateId = options.generateId ?? createDefaultId;
+  const currentDate = options.currentDate ?? (() => new Date());
+  const prompt = NonEmptyStringSchema.parse(input.prompt);
+  const executionPlan = resolveExecutionPlan(input);
+  const reportId = `report-${generateId()}`;
+  const createdAt = toIsoDatetime(currentDate());
+  const candidateSlots = executionPlan.candidateSlots;
+  const judgeSlot = executionPlan.judgeSlot;
+  const candidateCount = input.candidateRuns.filter((run) => run.role !== "judge").length;
+  const candidateMode = getCandidateMode(candidateCount);
+  const successfulCandidateRuns = input.candidateRuns.filter(isCompletedCandidateRun);
+  const consensusItems = extractConsensusItems(input.candidateRuns, { generateId });
+  const conflicts = extractConflictPoints(input.candidateRuns, { generateId });
+  const fallbackSource = selectFallbackSource(input.candidateRuns);
+
+  let judgeRun: ModelRun | null = null;
+  let usedFallbackResolution = false;
+  let resolution =
+    conflicts.length === 0 && fallbackSource && isCompletedCandidateRun(fallbackSource)
+      ? buildCandidateResolution({ sourceRun: fallbackSource })
+      : null;
+
+  if (successfulCandidateRuns.length > 0 && conflicts.length > 0) {
+    if (!judgeSlot) {
+      throw new Error("No judge slot is configured for this execution plan.");
+    }
+
+    judgeRun = await executeStructuredRun({
+      slot: judgeSlot,
+      mode: input.mode,
+      schema: JudgeModelOutputSchema,
+      system: buildJudgeSystemPrompt(input.language),
+      prompt: buildJudgeUserPrompt({
+        prompt,
+        candidateRuns: successfulCandidateRuns,
+        consensusItems,
+        conflicts,
+      }),
+      options,
+      generateId,
+      currentDate,
+    });
+
+    resolution = isCompletedJudgeRun(judgeRun)
+      ? buildResolutionFromJudge({ judgeRun, conflicts })
+      : null;
+
+    if (resolution === null && fallbackSource && isCompletedCandidateRun(fallbackSource)) {
+      usedFallbackResolution = true;
+      resolution = buildFallbackResolution({ sourceRun: fallbackSource, conflicts });
+    }
+  }
+
+  const allRuns = judgeRun ? [...input.candidateRuns, judgeRun] : [...input.candidateRuns];
+  const status =
+    successfulCandidateRuns.length === 0 || resolution === null
+      ? "failed"
+      : allRuns.every((run) => run.status === "completed") && !usedFallbackResolution
+        ? "ready"
+        : "partial";
+  const slotExecutions = buildCandidateSlotExecutions(candidateSlots, input.candidateRuns);
+  if (judgeSlot && judgeRun) {
+    slotExecutions.push({ slot: judgeSlot, run: judgeRun });
+  }
+
+  const report = SynthesisReportSchema.parse(
+    buildSynthesisReport({
+      id: reportId,
+      prompt,
+      summary: resolution?.summary ?? createDefaultFailureSummary(),
+      status,
+      candidateMode,
+      pendingJudge: false,
+      reportStage: status === "failed" ? "failed" : "resolved",
+      judgeStatus:
+        conflicts.length === 0
+          ? "not_needed"
+          : judgeRun && isCompletedJudgeRun(judgeRun)
+            ? "completed"
+            : judgeRun
+              ? "failed"
+              : "not_needed",
+      executionPlan,
+      consensusItems,
+      successfulCandidateCount: successfulCandidateRuns.length,
+      conflicts,
+      resolution,
+      nextActions: status === "failed" ? [] : buildNextActions(successfulCandidateRuns, resolution),
+      modelRuns: allRuns,
+      createdAt,
+    }),
+  );
+
+  const truthPanelSnapshot = TruthPanelSnapshotSchema.parse(
+    buildTruthPanelSnapshot({
+      runs: allRuns,
+      reportId: report.id,
+      generatedAt: report.createdAt,
+      events: buildTraceEvents({
+        slotExecutions,
+        generatedAt: report.createdAt,
+        generateId,
+        usedFallbackResolution,
+      }),
+    }),
+  );
+
+  return { report, truthPanelSnapshot };
 }

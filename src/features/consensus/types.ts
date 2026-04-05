@@ -2,11 +2,14 @@ import type { LanguageModel } from "ai";
 
 import type { SupportedProviderId } from "@/features/settings/providers";
 import type {
+  CandidateMode,
   CandidateModelOutput,
   ConflictPoint,
   ConsensusItem,
   JudgeModelOutput,
+  JudgeStatus,
   ModelRun,
+  ReportStage,
   Resolution,
   SynthesisReport,
   TraceEvent,
@@ -14,13 +17,14 @@ import type {
   TruthPanelSnapshot,
 } from "@/schema";
 
-export const synthesisPresetIds = ["crossVendorDefault", "freeDefault"] as const;
+export const synthesisPresetIds = ["single", "dual", "crossVendorDefault", "freeDefault"] as const;
 export const synthesisSlotIds = ["strong", "fast-1", "fast-2", "judge"] as const;
 
 export type SynthesisPresetId = (typeof synthesisPresetIds)[number];
 export type SynthesisSlotId = (typeof synthesisSlotIds)[number];
 export type SynthesisMode = "mock" | "real";
 export type SynthesisOutputType = "candidate" | "judge";
+export type JudgeMode = "auto" | "manual";
 
 export type SynthesisModelSlot = {
   id: SynthesisSlotId;
@@ -28,6 +32,24 @@ export type SynthesisModelSlot = {
   modelId: string;
   role: "strong" | "fast" | "judge";
   outputType: SynthesisOutputType;
+};
+
+export type ExecutionPlanSource =
+  | {
+      kind: "preset";
+      presetId: SynthesisPresetId;
+    }
+  | {
+      kind: "custom";
+      label: string | null;
+    };
+
+export type ExecutionPlan = {
+  version: 1;
+  candidateSlots: readonly SynthesisModelSlot[];
+  judgeSlot: SynthesisModelSlot | null;
+  conflictMode: JudgeMode;
+  source: ExecutionPlanSource;
 };
 
 export type SynthesisPreset = {
@@ -39,6 +61,18 @@ export type RunSynthesisInput = {
   prompt: string;
   mode: SynthesisMode;
   presetId?: SynthesisPresetId;
+  executionPlan?: ExecutionPlan;
+  judgeMode?: JudgeMode;
+  language?: string;
+};
+
+/** Used to run only the judge step on an already-completed set of candidate runs. */
+export type RunJudgeOnlyInput = {
+  prompt: string;
+  mode: SynthesisMode;
+  candidateRuns: ModelRun[];
+  presetId?: SynthesisPresetId;
+  executionPlan?: ExecutionPlan;
   language?: string;
 };
 
@@ -118,6 +152,10 @@ export type BuildResolutionFromJudgeInput = {
   conflicts: ConflictPoint[];
 };
 
+export type BuildCandidateResolutionInput = {
+  sourceRun: CompletedCandidateRun;
+};
+
 export type BuildFallbackResolutionInput = {
   sourceRun: CompletedCandidateRun;
   conflicts: ConflictPoint[];
@@ -128,6 +166,11 @@ export type BuildReportInput = {
   prompt: string;
   summary: string;
   status: SynthesisReport["status"];
+  candidateMode: CandidateMode;
+  pendingJudge: boolean;
+  reportStage: ReportStage;
+  judgeStatus: JudgeStatus;
+  executionPlan: ExecutionPlan | null;
   consensusItems: ConsensusItem[];
   successfulCandidateCount: number;
   conflicts: ConflictPoint[];

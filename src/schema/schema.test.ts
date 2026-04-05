@@ -140,6 +140,11 @@ const readyReport: SynthesisReport = {
   prompt: "Design the schema layer for Phase 1.",
   summary: "The report converges on strict domain schemas and a nullable failed resolution.",
   status: "ready",
+  candidateMode: "single",
+  pendingJudge: false,
+  reportStage: "resolved",
+  judgeStatus: "completed",
+  executionPlan: null,
   consensus: {
     summary: "The schema layer should be the single type source of truth.",
     items: [
@@ -193,6 +198,7 @@ const partialReport: SynthesisReport = {
   ...readyReport,
   id: "report-partial-1",
   status: "partial",
+  candidateMode: "dual",
   modelRuns: [completedCandidateRun, failedFastRun, completedJudgeRun],
 };
 
@@ -201,6 +207,11 @@ const failedReport: SynthesisReport = {
   prompt: "Design the schema layer for Phase 1.",
   summary: "Every run failed before a usable synthesis report could be assembled.",
   status: "failed",
+  candidateMode: "single",
+  pendingJudge: false,
+  reportStage: "failed",
+  judgeStatus: "not_needed",
+  executionPlan: null,
   consensus: {
     summary: "No reliable consensus was extracted.",
     items: [],

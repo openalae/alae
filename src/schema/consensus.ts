@@ -220,12 +220,198 @@ export const ConsensusSectionSchema = z
   })
   .strict();
 
-export const SynthesisReportSchema = z
+export const CandidateModeSchema = z.enum(["single", "dual", "multi"]);
+export const ReportStageSchema = z.enum([
+  "candidate_complete",
+  "awaiting_judge",
+  "judge_running",
+  "resolved",
+  "failed",
+]);
+export const JudgeStatusSchema = z.enum([
+  "not_needed",
+  "pending",
+  "running",
+  "completed",
+  "failed",
+]);
+export const ConflictModeSchema = z.enum(["auto", "manual"]);
+
+export const ExecutionPlanSlotSchema = z
+  .object({
+    id: NonEmptyStringSchema,
+    provider: NonEmptyStringSchema,
+    modelId: NonEmptyStringSchema,
+    role: ModelRoleSchema,
+    outputType: z.enum(["candidate", "judge"]),
+  })
+  .strict();
+
+export const ExecutionPlanSourceSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("preset"),
+      presetId: NonEmptyStringSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("custom"),
+      label: NonEmptyStringSchema.nullable(),
+    })
+    .strict(),
+]);
+
+export const ExecutionPlanSchema = z
+  .object({
+    version: z.literal(1),
+    candidateSlots: z.array(ExecutionPlanSlotSchema).min(1).max(3),
+    judgeSlot: ExecutionPlanSlotSchema.nullable(),
+    conflictMode: ConflictModeSchema.default("auto"),
+    source: ExecutionPlanSourceSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    value.candidateSlots.forEach((slot, index) => {
+      if (slot.outputType !== "candidate") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "candidateSlots must only contain candidate slots",
+          path: ["candidateSlots", index, "outputType"],
+        });
+      }
+
+      if (slot.role === "judge") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "candidateSlots cannot include judge roles",
+          path: ["candidateSlots", index, "role"],
+        });
+      }
+    });
+
+    if (value.judgeSlot) {
+      if (value.judgeSlot.outputType !== "judge") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "judgeSlot must use outputType='judge'",
+          path: ["judgeSlot", "outputType"],
+        });
+      }
+
+      if (value.judgeSlot.role !== "judge") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "judgeSlot must use role='judge'",
+          path: ["judgeSlot", "role"],
+        });
+      }
+    }
+
+    if (value.candidateSlots.length === 1 && value.judgeSlot !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "single-candidate execution plans should not include a judge slot",
+        path: ["judgeSlot"],
+      });
+    }
+  });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function getLegacyJudgeRun(modelRuns: unknown): Record<string, unknown> | null {
+  if (!Array.isArray(modelRuns)) {
+    return null;
+  }
+
+  for (let index = modelRuns.length - 1; index >= 0; index -= 1) {
+    const run = modelRuns[index];
+    if (isRecord(run) && run.role === "judge") {
+      return run;
+    }
+  }
+
+  return null;
+}
+
+function deriveLegacyJudgeStatus(input: unknown): z.infer<typeof JudgeStatusSchema> {
+  if (!isRecord(input)) {
+    return "not_needed";
+  }
+
+  if (typeof input.judgeStatus === "string") {
+    return input.judgeStatus as z.infer<typeof JudgeStatusSchema>;
+  }
+
+  if (input.pendingJudge === true) {
+    return "pending";
+  }
+
+  const judgeRun = getLegacyJudgeRun(input.modelRuns);
+
+  if (!judgeRun) {
+    return "not_needed";
+  }
+
+  if (judgeRun.status === "running") {
+    return "running";
+  }
+
+  const parsed = isRecord(judgeRun.parsed) ? judgeRun.parsed : null;
+  if (judgeRun.status === "completed" && parsed?.outputType === "judge") {
+    return "completed";
+  }
+
+  if (judgeRun.status === "failed") {
+    const error = isRecord(judgeRun.error) ? judgeRun.error : null;
+    if (error?.code === "SKIPPED_NO_CANDIDATE_SUCCESS") {
+      return "not_needed";
+    }
+
+    return "failed";
+  }
+
+  return "not_needed";
+}
+
+function deriveLegacyReportStage(input: unknown): z.infer<typeof ReportStageSchema> {
+  if (!isRecord(input)) {
+    return "resolved";
+  }
+
+  if (typeof input.reportStage === "string") {
+    return input.reportStage as z.infer<typeof ReportStageSchema>;
+  }
+
+  if (input.status === "failed") {
+    return "failed";
+  }
+
+  const judgeStatus = deriveLegacyJudgeStatus(input);
+  if (judgeStatus === "pending") {
+    return "awaiting_judge";
+  }
+
+  if (judgeStatus === "running") {
+    return "judge_running";
+  }
+
+  return "resolved";
+}
+
+const SynthesisReportObjectSchema = z
   .object({
     id: EntityIdSchema,
     prompt: NonEmptyStringSchema,
     summary: NonEmptyStringSchema,
     status: z.enum(["ready", "partial", "failed"]),
+    candidateMode: CandidateModeSchema.default("multi"),
+    pendingJudge: z.boolean().default(false),
+    reportStage: ReportStageSchema.default("resolved"),
+    judgeStatus: JudgeStatusSchema.default("not_needed"),
+    executionPlan: ExecutionPlanSchema.nullable().default(null),
     consensus: ConsensusSectionSchema,
     conflicts: z.array(ConflictPointSchema),
     resolution: ResolutionSchema.nullable(),
@@ -233,7 +419,21 @@ export const SynthesisReportSchema = z
     modelRuns: z.array(ModelRunSchema).min(1),
     createdAt: IsoDatetimeSchema,
   })
-  .strict()
+  .strict();
+
+export const SynthesisReportSchema = z
+  .preprocess((input) => {
+    if (!isRecord(input)) {
+      return input;
+    }
+
+    return {
+      ...input,
+      reportStage: deriveLegacyReportStage(input),
+      judgeStatus: deriveLegacyJudgeStatus(input),
+      executionPlan: "executionPlan" in input ? input.executionPlan : null,
+    };
+  }, SynthesisReportObjectSchema)
   .superRefine((value, ctx) => {
     const conflictIds = new Set(value.conflicts.map((conflict) => conflict.id));
 
@@ -245,10 +445,11 @@ export const SynthesisReportSchema = z
       });
     }
 
-    if (value.status !== "failed" && value.resolution === null) {
+    // When pendingJudge is true, a partial report without resolution is allowed
+    if (value.status !== "failed" && value.resolution === null && !value.pendingJudge) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "ready and partial reports must include a resolution",
+        message: "ready and partial reports must include a resolution (or set pendingJudge=true)",
         path: ["resolution"],
       });
     }
@@ -272,6 +473,68 @@ export const SynthesisReportSchema = z
         }
       }
     }
+
+    if (value.status === "failed" && value.reportStage !== "failed") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "failed reports must set reportStage='failed'",
+        path: ["reportStage"],
+      });
+    }
+
+    if (value.reportStage === "failed" && value.status !== "failed") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "reportStage='failed' requires status='failed'",
+        path: ["status"],
+      });
+    }
+
+    if (value.pendingJudge !== (value.reportStage === "awaiting_judge")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "pendingJudge must match reportStage='awaiting_judge'",
+        path: ["pendingJudge"],
+      });
+    }
+
+    if (value.reportStage === "awaiting_judge" && value.judgeStatus !== "pending") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "awaiting_judge reports must set judgeStatus='pending'",
+        path: ["judgeStatus"],
+      });
+    }
+
+    if (value.judgeStatus === "pending" && value.reportStage !== "awaiting_judge") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "judgeStatus='pending' requires reportStage='awaiting_judge'",
+        path: ["reportStage"],
+      });
+    }
+
+    if (value.reportStage === "awaiting_judge" && value.resolution !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "awaiting_judge reports must not include a resolution yet",
+        path: ["resolution"],
+      });
+    }
+
+    if (value.executionPlan !== null) {
+      const candidateCount = value.executionPlan.candidateSlots.length;
+      const expectedMode =
+        candidateCount === 1 ? "single" : candidateCount === 2 ? "dual" : "multi";
+
+      if (value.candidateMode !== expectedMode) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "candidateMode must match the executionPlan candidate count",
+          path: ["candidateMode"],
+        });
+      }
+    }
   });
 
 export type ValidationIssue = z.infer<typeof ValidationIssueSchema>;
@@ -289,4 +552,11 @@ export type ModelRunError = z.infer<typeof ModelRunErrorSchema>;
 export type ModelRunValidation = z.infer<typeof ModelRunValidationSchema>;
 export type ModelRun = z.infer<typeof ModelRunSchema>;
 export type ConsensusSection = z.infer<typeof ConsensusSectionSchema>;
+export type CandidateMode = z.infer<typeof CandidateModeSchema>;
+export type ReportStage = z.infer<typeof ReportStageSchema>;
+export type JudgeStatus = z.infer<typeof JudgeStatusSchema>;
+export type ConflictMode = z.infer<typeof ConflictModeSchema>;
+export type ExecutionPlanSlot = z.infer<typeof ExecutionPlanSlotSchema>;
+export type ExecutionPlanSource = z.infer<typeof ExecutionPlanSourceSchema>;
+export type ExecutionPlan = z.infer<typeof ExecutionPlanSchema>;
 export type SynthesisReport = z.infer<typeof SynthesisReportSchema>;

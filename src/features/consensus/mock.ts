@@ -1,7 +1,12 @@
 import type { LanguageModel, LanguageModelV1CallOptions } from "ai";
 
 import { getSynthesisPreset } from "@/features/consensus/presets";
-import type { MockRegistry, SynthesisPresetId, SynthesisSlotId } from "@/features/consensus/types";
+import type {
+  ExecutionPlan,
+  MockRegistry,
+  SynthesisPresetId,
+  SynthesisSlotId,
+} from "@/features/consensus/types";
 import type { CandidateModelOutput, JudgeModelOutput } from "@/schema";
 
 function isTextPart(part: unknown): part is { type: "text"; text: string } {
@@ -256,7 +261,7 @@ export function createDefaultMockRegistry(
         modelId,
         promptTokens: 352,
         completionTokens: 132,
-        buildObject: (options) =>
+        buildObject: () =>
           buildFastCandidateOne(),
       }),
     "fast-2": (modelId, provider) =>
@@ -265,7 +270,7 @@ export function createDefaultMockRegistry(
         modelId,
         promptTokens: 328,
         completionTokens: 124,
-        buildObject: (options) =>
+        buildObject: () =>
           buildFastCandidateTwo(),
       }),
     judge: (modelId, provider) =>
@@ -280,4 +285,60 @@ export function createDefaultMockRegistry(
         },
       }),
   });
+}
+
+export function createDefaultMockRegistryForExecutionPlan(
+  executionPlan: ExecutionPlan,
+): MockRegistry {
+  const slots = [
+    ...executionPlan.candidateSlots,
+    ...(executionPlan.judgeSlot ? [executionPlan.judgeSlot] : []),
+  ];
+
+  return slots.reduce<MockRegistry>((registry, slot) => {
+    if (slot.id === "strong") {
+      registry.strong = createMockLanguageModel({
+        provider: slot.provider,
+        modelId: slot.modelId,
+        promptTokens: 480,
+        completionTokens: 168,
+        buildObject: () => buildStrongCandidate(),
+      });
+    }
+
+    if (slot.id === "fast-1") {
+      registry["fast-1"] = createMockLanguageModel({
+        provider: slot.provider,
+        modelId: slot.modelId,
+        promptTokens: 352,
+        completionTokens: 132,
+        buildObject: () => buildFastCandidateOne(),
+      });
+    }
+
+    if (slot.id === "fast-2") {
+      registry["fast-2"] = createMockLanguageModel({
+        provider: slot.provider,
+        modelId: slot.modelId,
+        promptTokens: 328,
+        completionTokens: 124,
+        buildObject: () => buildFastCandidateTwo(),
+      });
+    }
+
+    if (slot.id === "judge") {
+      registry.judge = createMockLanguageModel({
+        provider: slot.provider,
+        modelId: slot.modelId,
+        promptTokens: 624,
+        completionTokens: 196,
+        buildObject: (options) => {
+          const payload = extractJudgePayload(extractUserPromptText(options));
+          return buildJudgeOutput(payload.prompt, payload.conflictIds);
+        },
+      });
+    }
+
+    return registry;
+  }, {});
 }

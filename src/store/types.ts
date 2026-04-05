@@ -1,6 +1,13 @@
 import type { StateCreator, StoreApi } from "zustand";
 
+import type {
+  ModelCatalogRecord,
+  ModelCatalogItem,
+  SupportedProviderId,
+} from "@/features/settings/providers";
 import type { NodeStatus, SynthesisReport, TruthPanelSnapshot } from "@/schema";
+
+export type { ModelCatalogRecord } from "@/features/settings/providers";
 
 export type ActivePath = {
   currentConversationId: string | null;
@@ -30,12 +37,23 @@ export type WorkspaceActions = {
 
 export type RuntimeState = {
   runStatus: NodeStatus;
+  runPhase: RuntimePhase;
   runtimeErrorMessage: string | null;
   lastRunCompletedAt: string | null;
 };
 
+export type RuntimePhase =
+  | "idle"
+  | "preflight"
+  | "candidate_running"
+  | "conflicts_pending"
+  | "judge_running"
+  | "completed"
+  | "failed";
+
 export type RuntimeActions = {
-  beginRun: () => void;
+  beginRun: (phase?: Extract<RuntimePhase, "preflight" | "candidate_running" | "judge_running">) => void;
+  setRunPhase: (phase: RuntimePhase) => void;
   completeRun: (report: SynthesisReport) => void;
   failRun: (message: string) => void;
   resetRuntime: () => void;
@@ -54,15 +72,21 @@ export type TruthPanelActions = {
   clearTruthPanelSnapshot: () => void;
 };
 
+export type ProviderStatusMap = Partial<Record<SupportedProviderId, ApiKeyStatus>>;
+
 export type SettingsState = {
-  apiKeyStatuses: Record<string, ApiKeyStatus>;
+  apiKeyStatuses: ProviderStatusMap;
+  modelCatalog: ModelCatalogRecord;
 };
 
 export type SettingsActions = {
-  setApiKeyStatus: (provider: string, status: ApiKeyStatus) => void;
-  setApiKeyStatuses: (statuses: Record<string, ApiKeyStatus>) => void;
-  clearApiKeyStatus: (provider: string) => void;
+  setApiKeyStatus: (provider: SupportedProviderId, status: ApiKeyStatus) => void;
+  setApiKeyStatuses: (statuses: ProviderStatusMap) => void;
+  clearApiKeyStatus: (provider: SupportedProviderId) => void;
   resetApiKeyStatuses: () => void;
+  setModelCatalog: (catalog: ModelCatalogRecord) => void;
+  setProviderModelCatalog: (provider: SupportedProviderId, models: ModelCatalogItem[]) => void;
+  resetModelCatalog: () => void;
 };
 
 export type AppStoreState = WorkspaceState & RuntimeState & TruthPanelState & SettingsState;

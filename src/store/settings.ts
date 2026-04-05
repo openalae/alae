@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { JudgeMode, SynthesisPresetId } from "@/features/consensus/types";
+
 export type Theme = "light" | "dark";
 export type Locale = "en" | "zh";
-export type SettingsTab = "appearance" | "providers" | "advanced";
+export type SettingsTab = "appearance" | "providers" | "presets" | "advanced";
 
 interface SettingsState {
   theme: Theme;
@@ -13,6 +15,8 @@ interface SettingsState {
   isLeftPanelOpen: boolean;
   isSettingsModalOpen: boolean;
   developerMode: boolean;
+  judgeMode: JudgeMode;
+  defaultPresetId: SynthesisPresetId;
   setTheme: (theme: Theme) => void;
   setLocale: (locale: Locale) => void;
   setActiveSettingsTab: (tab: SettingsTab) => void;
@@ -23,6 +27,8 @@ interface SettingsState {
   openSettingsModal: (tab?: SettingsTab) => void;
   closeSettingsModal: () => void;
   setDeveloperMode: (enabled: boolean) => void;
+  setJudgeMode: (mode: JudgeMode) => void;
+  setDefaultPresetId: (presetId: SynthesisPresetId) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -31,10 +37,12 @@ export const useSettingsStore = create<SettingsState>()(
       theme: "dark",
       locale: "en",
       activeSettingsTab: "appearance",
-      isRightPanelOpen: true,
-      isLeftPanelOpen: true,
+      isRightPanelOpen: false,
+      isLeftPanelOpen: false,
       isSettingsModalOpen: false,
       developerMode: false,
+      judgeMode: "auto",
+      defaultPresetId: "freeDefault",
       setTheme: (theme) => set({ theme }),
       setLocale: (locale) => set({ locale }),
       setActiveSettingsTab: (tab) => set({ activeSettingsTab: tab }),
@@ -42,12 +50,14 @@ export const useSettingsStore = create<SettingsState>()(
       setRightPanelOpen: (open) => set({ isRightPanelOpen: open }),
       toggleLeftPanel: () => set((s) => ({ isLeftPanelOpen: !s.isLeftPanelOpen })),
       setLeftPanelOpen: (open) => set({ isLeftPanelOpen: open }),
-      openSettingsModal: (tab) => set((s) => ({ 
-        isSettingsModalOpen: true, 
-        activeSettingsTab: tab ?? s.activeSettingsTab 
+      openSettingsModal: (tab) => set((s) => ({
+        isSettingsModalOpen: true,
+        activeSettingsTab: tab ?? s.activeSettingsTab,
       })),
       closeSettingsModal: () => set({ isSettingsModalOpen: false }),
       setDeveloperMode: (enabled) => set({ developerMode: enabled }),
+      setJudgeMode: (mode) => set({ judgeMode: mode }),
+      setDefaultPresetId: (presetId) => set({ defaultPresetId: presetId }),
     }),
     {
       name: "alae-settings-storage",
@@ -57,6 +67,8 @@ export const useSettingsStore = create<SettingsState>()(
         isRightPanelOpen: state.isRightPanelOpen,
         isLeftPanelOpen: state.isLeftPanelOpen,
         developerMode: state.developerMode,
+        judgeMode: state.judgeMode,
+        defaultPresetId: state.defaultPresetId,
       }),
     }
   )

@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { createInitialAppStoreState } from "@/store";
 import { appStore } from "@/store/app-store";
-import { useSettingsStore } from "@/store/settings";
 import { TruthPanel } from "@/features/truth-panel";
 import type { TruthPanelSnapshot, SynthesisReport } from "@/schema";
 
@@ -12,6 +11,11 @@ const failedReport: SynthesisReport = {
   prompt: "Inspect a failing run.",
   summary: "A model failure prevented a valid synthesis resolution.",
   status: "failed",
+  candidateMode: "multi",
+  pendingJudge: false,
+  reportStage: "failed",
+  judgeStatus: "failed",
+  executionPlan: null,
   consensus: {
     summary: "No reliable consensus was extracted.",
     items: [],
@@ -55,6 +59,11 @@ const partialReport: SynthesisReport = {
   prompt: "Inspect a partial run.",
   summary: "One candidate failed but the report still rendered.",
   status: "partial",
+  candidateMode: "multi",
+  pendingJudge: false,
+  reportStage: "resolved",
+  judgeStatus: "completed",
+  executionPlan: null,
   consensus: {
     summary: "One valid candidate completed.",
     items: [],
@@ -193,12 +202,16 @@ describe("TruthPanel", () => {
   });
 
   it("renders an empty state instead of the old preview copy", () => {
+    appStore.setState(
+      createInitialAppStoreState({
+        isTruthPanelOpen: true,
+      }),
+    );
+
     render(<TruthPanel />);
 
     expect(screen.getByRole("heading", { name: "Model status" })).toBeInTheDocument();
-    expect(
-      screen.getByText(/Run an analysis to see model calls, errors, and validation details/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/No model-call details are available yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/Truth Panel Preview/i)).not.toBeInTheDocument();
   });
 
@@ -210,26 +223,25 @@ describe("TruthPanel", () => {
         truthPanelSnapshot: snapshot,
       }),
     );
-    useSettingsStore.setState({ developerMode: true });
 
     render(<TruthPanel />);
 
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Model calls" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Output issues" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Activity log" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Model calls" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Output issues" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activity log" })).toBeInTheDocument();
 
-    // Expand collapsed sections
+    fireEvent.click(screen.getByRole("button", { name: /Overview/i }));
+    expect(screen.getByText("Aggregate total")).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: /Model calls/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Activity log/i }));
-
-    expect(screen.getByText("Aggregate input")).toBeInTheDocument();
     expect(screen.getByText("Schema validation failed")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Activity log/i }));
     expect(screen.getByText("Judge run completed successfully.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Hide details/i }));
-    expect(screen.queryByRole("heading", { name: "Overview" })).not.toBeInTheDocument();
-    expect(screen.getByText("Aggregate total")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Model status" })).not.toBeInTheDocument();
   });
 
   it("auto opens when a runtime error exists without a new snapshot", async () => {
@@ -244,7 +256,7 @@ describe("TruthPanel", () => {
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(true);
     });
-    expect(screen.getByText("Runtime failure")).toBeInTheDocument();
+    expect(screen.getAllByText("Runtime failure")).toHaveLength(2);
     expect(screen.getByText("transport down")).toBeInTheDocument();
   });
 
@@ -261,10 +273,9 @@ describe("TruthPanel", () => {
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(true);
     });
-    expect(screen.getByText("Latest result failed")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Model calls" })).toBeInTheDocument();
+    expect(screen.getByText("Latest result [FAILED]")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Model calls" })).toBeInTheDocument();
 
-    // Expand collapsed section
     fireEvent.click(screen.getByRole("button", { name: /Model calls/i }));
     expect(screen.getByText(/judge/i)).toBeInTheDocument();
   });
@@ -282,7 +293,7 @@ describe("TruthPanel", () => {
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(false);
     });
-    expect(screen.getByRole("button", { name: /Show details/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Model status" })).not.toBeInTheDocument();
   });
 
   it("does not auto open for ready reports", async () => {
@@ -298,6 +309,6 @@ describe("TruthPanel", () => {
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(false);
     });
-    expect(screen.getByRole("button", { name: /Show details/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Model status" })).not.toBeInTheDocument();
   });
 });

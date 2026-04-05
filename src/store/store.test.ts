@@ -3,10 +3,12 @@ import {
   selectActivePath,
   selectApiKeyStatus,
   selectLatestSynthesisReport,
+  selectProviderModelCatalog,
   selectTruthPanelState,
   useAppStore,
   type ApiKeyStatus,
 } from "@/store";
+import { buildModelCatalogRecord } from "@/features/settings/providers";
 import type { ModelRun, SynthesisReport, TruthPanelSnapshot } from "@/schema";
 
 const startedAt = "2026-03-17T10:00:00Z";
@@ -48,6 +50,11 @@ const report: SynthesisReport = {
   prompt: "Design the store skeleton for Phase 1.",
   summary: "The state layer should stay pure and IO-free.",
   status: "ready",
+  candidateMode: "single",
+  pendingJudge: false,
+  reportStage: "resolved",
+  judgeStatus: "completed",
+  executionPlan: null,
   consensus: {
     summary: "A single Zustand store with slices keeps the MVP extensible.",
     items: [],
@@ -121,6 +128,7 @@ describe("app store", () => {
     expect(state.isTruthPanelOpen).toBe(false);
     expect(state.truthPanelSnapshot).toBeNull();
     expect(state.apiKeyStatuses).toEqual({});
+    expect(state.modelCatalog).toEqual(buildModelCatalogRecord());
   });
 
   it("merges preloaded state without losing defaults", () => {
@@ -136,6 +144,32 @@ describe("app store", () => {
     expect(state.currentConversationId).toBe("conversation-1");
     expect(state.currentBranchId).toBeNull();
     expect(state.apiKeyStatuses).toEqual({ openai: openAiStatus });
+    expect(state.modelCatalog.openai).toEqual([
+      {
+        id: "openai:gpt-5-mini",
+        provider: "openai",
+        modelId: "gpt-5-mini",
+        label: "GPT-5 Mini",
+        sizeBytes: null,
+        modifiedAt: null,
+        source: "paid",
+        availability: "setup_required",
+        supportsCandidate: true,
+        supportsJudge: true,
+      },
+      {
+        id: "openai:gpt-5.2",
+        provider: "openai",
+        modelId: "gpt-5.2",
+        label: "GPT-5.2",
+        sizeBytes: null,
+        modifiedAt: null,
+        source: "paid",
+        availability: "setup_required",
+        supportsCandidate: true,
+        supportsJudge: true,
+      },
+    ]);
     expect(state.runStatus).toBe("idle");
   });
 
@@ -255,10 +289,56 @@ describe("app store", () => {
     expect(store.getState().apiKeyStatuses).toEqual({});
   });
 
+  it("manages the shared model catalog", () => {
+    const store = createAppStore();
+    const ollamaModels = [
+      {
+        id: "ollama:qwen3:8b",
+        provider: "ollama" as const,
+        modelId: "qwen3:8b",
+        label: "qwen3:8b",
+        sizeBytes: 123,
+        modifiedAt: "2026-03-17T10:00:00Z",
+        source: "local" as const,
+        availability: "ready" as const,
+        supportsCandidate: true,
+        supportsJudge: true,
+      },
+    ];
+
+    store.getState().setProviderModelCatalog("ollama", ollamaModels);
+    expect(selectProviderModelCatalog("ollama")(store.getState())).toEqual(ollamaModels);
+
+    const replacementCatalog = buildModelCatalogRecord({
+      providerConfiguredMap: {
+        openrouter: true,
+        ollama: true,
+      },
+      discoveredModels: {
+        ollama: [
+          {
+            id: "ollama:llama3.2:latest",
+            modelId: "llama3.2:latest",
+            label: "llama3.2:latest",
+            sizeBytes: 456,
+            modifiedAt: "2026-03-17T10:10:00Z",
+          },
+        ],
+      },
+    });
+
+    store.getState().setModelCatalog(replacementCatalog);
+    expect(store.getState().modelCatalog).toEqual(replacementCatalog);
+
+    store.getState().resetModelCatalog();
+    expect(store.getState().modelCatalog).toEqual(buildModelCatalogRecord());
+  });
+
   it("exports the shared hook and selectors from the store barrel", () => {
     const store = createAppStore();
 
     expect(typeof useAppStore).toBe("function");
-    expect(selectApiKeyStatus("missing")(store.getState())).toBeUndefined();
+    expect(selectApiKeyStatus("openai")(store.getState())).toBeUndefined();
+    expect(selectProviderModelCatalog("ollama")(store.getState())).toEqual([]);
   });
 });

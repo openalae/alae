@@ -4,7 +4,7 @@ import {
   KeyRound,
   LoaderCircle,
   Sparkles,
-  Waypoints
+  Waypoints,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -265,7 +265,10 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
     selectedBranchId,
     selectBranch,
     selectedNode,
+    outlineNodes,
+    selectNode,
     conversationSummaries,
+    resolveConflicts,
   } = controller;
 
   // Only show example prompts when there's no conversation history and no active content
@@ -314,11 +317,18 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
         </div>
 
         {/* Main content area */}
-        <div className="mt-4">
+        <div className="mt-0">
           {isBootstrapping ? (
             <div className="px-4 md:px-8"><LoadingWorkspaceState /></div>
           ) : latestSynthesisReport ? (
-            <SynthesisReportSplitView report={latestSynthesisReport} />
+            <SynthesisReportSplitView
+              report={latestSynthesisReport}
+              onResolve={resolveConflicts}
+              isBusy={isBusy}
+              conversationOutlineNodes={outlineNodes}
+              activeOutlineNodeId={selectedNode?.id ?? null}
+              onSelectOutlineNode={selectNode}
+            />
           ) : selectedNode ? (
             <div className="px-4 md:px-8"><HistoricalNodeState mode={displayMode} node={selectedNode} /></div>
           ) : (

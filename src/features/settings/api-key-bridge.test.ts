@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { buildModelCatalogRecord } from "@/features/settings/providers";
 import { createInitialAppStoreState } from "@/store";
 import { appStore } from "@/store/app-store";
 
@@ -49,6 +50,20 @@ describe("api-key-bridge", () => {
         };
       }
 
+      if (command === "get_local_provider_models") {
+        return {
+          ollama: [
+            {
+              id: "ollama:qwen3:8b",
+              modelId: "qwen3:8b",
+              label: "qwen3:8b",
+              sizeBytes: 4 * 1024 * 1024 * 1024,
+              modifiedAt: "2026-03-17T00:00:00.000Z",
+            },
+          ],
+        };
+      }
+
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -59,6 +74,9 @@ describe("api-key-bridge", () => {
     expect(appStore.getState().apiKeyStatuses.google?.configured).toBe(true);
     expect(appStore.getState().apiKeyStatuses.openrouter?.configured).toBe(false);
     expect(appStore.getState().apiKeyStatuses.ollama?.configured).toBe(true);
+    expect(appStore.getState().modelCatalog.openai[0]?.availability).toBe("ready");
+    expect(appStore.getState().modelCatalog.google[0]?.availability).toBe("ready");
+    expect(appStore.getState().modelCatalog.ollama[0]?.modelId).toBe("qwen3:8b");
   });
 
   it("preserves previous configuration flags when refresh fails", async () => {
@@ -91,6 +109,7 @@ describe("api-key-bridge", () => {
       key: "sk-openai",
     });
     expect(appStore.getState().apiKeyStatuses.openai?.configured).toBe(true);
+    expect(appStore.getState().modelCatalog.openai[0]?.availability).toBe("ready");
     expect(JSON.stringify(appStore.getState())).not.toContain("sk-openai");
   });
 
@@ -109,6 +128,7 @@ describe("api-key-bridge", () => {
 
     expect(appStore.getState().apiKeyStatuses.google?.configured).toBe(false);
     expect(appStore.getState().apiKeyStatuses.google?.error).toBeNull();
+    expect(appStore.getState().modelCatalog.google[0]?.availability).toBe("setup_required");
   });
 
   it("reads raw keys on demand without caching them", async () => {
@@ -150,6 +170,10 @@ describe("api-key-bridge", () => {
         throw new Error("ollama probe failed");
       }
 
+      if (command === "get_local_provider_models") {
+        throw new Error("ollama tags failed");
+      }
+
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -158,5 +182,19 @@ describe("api-key-bridge", () => {
     expect(appStore.getState().apiKeyStatuses.openrouter?.configured).toBe(true);
     expect(appStore.getState().apiKeyStatuses.ollama?.configured).toBe(false);
     expect(appStore.getState().apiKeyStatuses.ollama?.error).toBe("ollama probe failed");
+    expect(appStore.getState().modelCatalog).toEqual(
+      buildModelCatalogRecord({
+        providerConfiguredMap: {
+          openai: true,
+          anthropic: false,
+          google: false,
+          openrouter: true,
+          ollama: false,
+        },
+        discoveredModels: {
+          ollama: [],
+        },
+      }),
+    );
   });
 });

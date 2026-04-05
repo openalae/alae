@@ -256,6 +256,22 @@ export function buildFallbackResolution({
   };
 }
 
+export function buildCandidateResolution({
+  sourceRun,
+}: Pick<BuildFallbackResolutionInput, "sourceRun">): Resolution {
+  const chosenApproach =
+    sourceRun.parsed.consensusItems[0]?.statement ?? sourceRun.parsed.summary;
+
+  return {
+    summary: sourceRun.parsed.summary,
+    rationale: "Candidate runs completed without a judge pass.",
+    chosenApproach,
+    resolvedConflictIds: [],
+    judgeModelRunId: sourceRun.id,
+    openRisks: [],
+  };
+}
+
 export function buildConsensusSummary(
   consensusItems: ConsensusItem[],
   successfulCandidateCount: number,
@@ -409,6 +425,11 @@ export function buildSynthesisReport(input: BuildReportInput) {
     prompt: input.prompt,
     summary: input.summary,
     status: input.status,
+    candidateMode: input.candidateMode,
+    pendingJudge: input.pendingJudge,
+    reportStage: input.reportStage,
+    judgeStatus: input.judgeStatus,
+    executionPlan: input.executionPlan,
     consensus: {
       summary: buildConsensusSummary(input.consensusItems, input.successfulCandidateCount),
       items: input.consensusItems,

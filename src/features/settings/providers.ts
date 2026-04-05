@@ -21,6 +21,27 @@ export type ProviderDefinition = {
   connectionHint?: string;
 };
 
+export type ModelCatalogSource = "local" | "free" | "paid";
+export type ModelCatalogAvailability = "ready" | "setup_required" | "unavailable";
+
+export type ProviderDiscoveredModel = {
+  id: string;
+  modelId: string;
+  label: string;
+  sizeBytes: number | null;
+  modifiedAt: string | null;
+};
+
+export type ModelCatalogItem = ProviderDiscoveredModel & {
+  provider: SupportedProviderId;
+  source: ModelCatalogSource;
+  availability: ModelCatalogAvailability;
+  supportsCandidate: boolean;
+  supportsJudge: boolean;
+};
+
+export type ModelCatalogRecord = Record<SupportedProviderId, ModelCatalogItem[]>;
+
 export const providerDefinitions: ProviderDefinition[] = [
   {
     id: "openai",
@@ -67,6 +88,62 @@ const providerDefinitionMap = Object.fromEntries(
 
 const credentialProviderIdSet = new Set<SupportedProviderId>(credentialProviderIds);
 
+const curatedProviderCatalog: Record<
+  SupportedProviderId,
+  Array<{
+    modelId: string;
+    label: string;
+    source: ModelCatalogSource;
+    supportsCandidate: boolean;
+    supportsJudge: boolean;
+  }>
+> = {
+  openai: [
+    {
+      modelId: "gpt-5-mini",
+      label: "GPT-5 Mini",
+      source: "paid",
+      supportsCandidate: true,
+      supportsJudge: true,
+    },
+    {
+      modelId: "gpt-5.2",
+      label: "GPT-5.2",
+      source: "paid",
+      supportsCandidate: true,
+      supportsJudge: true,
+    },
+  ],
+  anthropic: [
+    {
+      modelId: "claude-sonnet-4-20250514",
+      label: "Claude Sonnet 4",
+      source: "paid",
+      supportsCandidate: true,
+      supportsJudge: true,
+    },
+  ],
+  google: [
+    {
+      modelId: "gemini-2.5-flash",
+      label: "Gemini 2.5 Flash",
+      source: "paid",
+      supportsCandidate: true,
+      supportsJudge: true,
+    },
+  ],
+  openrouter: [
+    {
+      modelId: "openrouter/free",
+      label: "OpenRouter Free",
+      source: "free",
+      supportsCandidate: true,
+      supportsJudge: true,
+    },
+  ],
+  ollama: [],
+};
+
 export const providerAccessCardId = "provider-access-card";
 
 export function getProviderDefinition(providerId: SupportedProviderId): ProviderDefinition {
@@ -81,4 +158,62 @@ export function providerRequiresApiKey(
   providerId: SupportedProviderId,
 ): providerId is CredentialProviderId {
   return credentialProviderIdSet.has(providerId);
+}
+
+export function buildCatalogItemId(provider: SupportedProviderId, modelId: string) {
+  return `${provider}:${modelId}`;
+}
+
+export function createEmptyModelCatalogRecord(): ModelCatalogRecord {
+  return supportedProviderIds.reduce(
+    (catalog, providerId) => ({
+      ...catalog,
+      [providerId]: [],
+    }),
+    {} as ModelCatalogRecord,
+  );
+}
+
+export function buildModelCatalogRecord(input: {
+  providerConfiguredMap?: Partial<Record<SupportedProviderId, boolean>>;
+  discoveredModels?: Partial<Record<SupportedProviderId, ProviderDiscoveredModel[]>>;
+} = {}): ModelCatalogRecord {
+  const catalog = createEmptyModelCatalogRecord();
+  const providerConfiguredMap = input.providerConfiguredMap ?? {};
+  const discoveredModels = input.discoveredModels ?? {};
+
+  for (const providerId of supportedProviderIds) {
+    if (providerId === "ollama") {
+      const localModels = discoveredModels.ollama ?? [];
+      catalog.ollama = localModels.map((model) => ({
+        ...model,
+        provider: "ollama",
+        id: model.id || buildCatalogItemId("ollama", model.modelId),
+        source: "local",
+        availability: providerConfiguredMap.ollama ? "ready" : "unavailable",
+        supportsCandidate: true,
+        supportsJudge: true,
+      }));
+      continue;
+    }
+
+    const availability: ModelCatalogAvailability = providerConfiguredMap[providerId]
+      ? "ready"
+      : "setup_required";
+
+    catalog[providerId] = curatedProviderCatalog[providerId].map((model) => ({
+      id: buildCatalogItemId(providerId, model.modelId),
+      provider: providerId,
+      modelId: model.modelId,
+      label: model.label,
+      sizeBytes: null,
+      modifiedAt: null,
+      source: model.source,
+      availability,
+      supportsCandidate: model.supportsCandidate,
+      supportsJudge: model.supportsJudge,
+    }));
+  }
+
+  return catalog;
 }

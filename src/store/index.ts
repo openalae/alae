@@ -1,4 +1,5 @@
 import type { ActivePath, AppStoreState, TruthPanelState } from "@/store/types";
+import type { SupportedProviderId } from "@/features/settings/providers";
 
 export { createAppStore, useAppStore } from "@/store/app-store";
 export { createInitialAppStoreState, initialAppStoreState } from "@/store/initial-state";
@@ -10,6 +11,8 @@ export type {
   AppStoreInstance,
   AppStorePreloadedState,
   AppStoreState,
+  ModelCatalogRecord,
+  ProviderStatusMap,
   RuntimeActions,
   RuntimeState,
   SettingsActions,
@@ -34,4 +37,7 @@ export const selectTruthPanelState = (state: AppStoreState): TruthPanelState => 
 });
 
 export const selectApiKeyStatus =
-  (provider: string) => (state: AppStoreState) => state.apiKeyStatuses[provider];
+  (provider: SupportedProviderId) => (state: AppStoreState) => state.apiKeyStatuses[provider];
+
+export const selectProviderModelCatalog =
+  (provider: SupportedProviderId) => (state: AppStoreState) => state.modelCatalog[provider];

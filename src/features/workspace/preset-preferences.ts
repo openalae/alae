@@ -1,6 +1,9 @@
-import { synthesisPresetIds, type SynthesisPresetId } from "@/features/consensus";
+import type { ExecutionPlan, SynthesisPresetId } from "@/features/consensus";
+import { synthesisPresetIds } from "@/features/consensus";
+import { ExecutionPlanSchema } from "@/schema";
 
 const workspacePresetStorageKey = "alae.workspace.selectedPresetId";
+const workspaceExecutionPlanStorageKey = "alae.workspace.selectedExecutionPlan";
 const supportedPresetIds = new Set<SynthesisPresetId>(synthesisPresetIds);
 
 function getStorage() {
@@ -51,4 +54,52 @@ export function clearStoredWorkspacePresetId() {
   storage.removeItem(workspacePresetStorageKey);
 }
 
-export { workspacePresetStorageKey };
+export function readStoredWorkspaceExecutionPlan(): ExecutionPlan | null {
+  const storage = getStorage();
+
+  if (!storage) {
+    return null;
+  }
+
+  const value = storage.getItem(workspaceExecutionPlanStorageKey);
+
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    const result = ExecutionPlanSchema.safeParse(parsed);
+
+    if (result.success) {
+      return result.data as ExecutionPlan;
+    }
+  } catch {
+    // fall through to cleanup
+  }
+
+  storage.removeItem(workspaceExecutionPlanStorageKey);
+  return null;
+}
+
+export function writeStoredWorkspaceExecutionPlan(executionPlan: ExecutionPlan) {
+  const storage = getStorage();
+
+  if (!storage) {
+    return;
+  }
+
+  storage.setItem(workspaceExecutionPlanStorageKey, JSON.stringify(executionPlan));
+}
+
+export function clearStoredWorkspaceExecutionPlan() {
+  const storage = getStorage();
+
+  if (!storage) {
+    return;
+  }
+
+  storage.removeItem(workspaceExecutionPlanStorageKey);
+}
+
+export { workspaceExecutionPlanStorageKey, workspacePresetStorageKey };

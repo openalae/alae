@@ -6,16 +6,19 @@ import {
   ApiKeyMutationResultSchema,
   ApiKeyStatusesSchema,
   ApiKeyValueSchema,
+  LocalProviderModelsSchema,
   LocalProviderStatusesSchema,
 } from "@/features/settings/contracts";
 import {
+  buildModelCatalogRecord,
   providerDefinitions,
   providerRequiresApiKey,
   type CredentialProviderId,
+  type ProviderDiscoveredModel,
   type SupportedProviderId,
 } from "@/features/settings/providers";
 import { appStore } from "@/store/app-store";
-import type { ApiKeyStatus } from "@/store";
+import type { ApiKeyStatus, ProviderStatusMap } from "@/store";
 
 const secureStoreUnavailableMessage =
   "Secure credential commands are only available inside the Tauri desktop runtime.";
@@ -47,6 +50,40 @@ function getStoredStatus(provider: SupportedProviderId): ApiKeyStatus {
       lastCheckedAt: null,
       error: null,
     }
+  );
+}
+
+function buildProviderConfiguredMap(
+  statuses: ProviderStatusMap,
+): Partial<Record<SupportedProviderId, boolean>> {
+  return Object.fromEntries(
+    providerDefinitions.map((provider) => [provider.id, statuses[provider.id]?.configured ?? false]),
+  ) as Partial<Record<SupportedProviderId, boolean>>;
+}
+
+function getStoredDiscoveredModels(): Partial<Record<SupportedProviderId, ProviderDiscoveredModel[]>> {
+  const { modelCatalog } = appStore.getState();
+
+  return {
+    ollama: modelCatalog.ollama.map(({ id, modelId, label, sizeBytes, modifiedAt }) => ({
+      id,
+      modelId,
+      label,
+      sizeBytes,
+      modifiedAt,
+    })),
+  };
+}
+
+function syncModelCatalog(
+  statuses: ProviderStatusMap,
+  discoveredModels: Partial<Record<SupportedProviderId, ProviderDiscoveredModel[]>> = getStoredDiscoveredModels(),
+) {
+  appStore.getState().setModelCatalog(
+    buildModelCatalogRecord({
+      providerConfiguredMap: buildProviderConfiguredMap(statuses),
+      discoveredModels,
+    }),
   );
 }
 
@@ -99,27 +136,30 @@ export async function refreshApiKeyStatuses(): Promise<void> {
   const lastCheckedAt = getTimestamp();
 
   if (!hasTauriRuntime()) {
-    appStore.getState().setApiKeyStatuses(
-      buildSuccessStatusMap(
-        {
-          openai: false,
-          anthropic: false,
-          google: false,
-          openrouter: false,
-        },
-        {
-          ollama: false,
-        },
-        lastCheckedAt,
-      ),
+    const statuses = buildSuccessStatusMap(
+      {
+        openai: false,
+        anthropic: false,
+        google: false,
+        openrouter: false,
+      },
+      {
+        ollama: false,
+      },
+      lastCheckedAt,
     );
+    appStore.getState().setApiKeyStatuses(statuses);
+    syncModelCatalog(statuses, {
+      ollama: [],
+    });
     return;
   }
 
   try {
-    const [hostedResult, localResult] = await Promise.allSettled([
+    const [hostedResult, localResult, localModelsResult] = await Promise.allSettled([
       invoke("get_api_key_statuses"),
       invoke("get_local_provider_statuses"),
+      invoke("get_local_provider_models"),
     ]);
 
     if (hostedResult.status === "rejected") {
@@ -131,6 +171,9 @@ export async function refreshApiKeyStatuses(): Promise<void> {
     let localStatuses: Partial<Record<SupportedProviderId, boolean>> = {
       ollama: false,
     };
+    let discoveredModels: Partial<Record<SupportedProviderId, ProviderDiscoveredModel[]>> = {
+      ollama: [],
+    };
 
     if (localResult.status === "fulfilled") {
       const parsedLocalStatuses = LocalProviderStatusesSchema.parse(localResult.value);
@@ -138,23 +181,39 @@ export async function refreshApiKeyStatuses(): Promise<void> {
       localStatuses = {
         ollama: parsedLocalStatuses.ollama ?? false,
       };
-    } else {
-      localErrors.ollama = toErrorMessage(localResult.reason);
     }
 
-    appStore.getState().setApiKeyStatuses(
-      buildSuccessStatusMap(
-        {
-          openai: hostedStatuses.openai ?? false,
-          anthropic: hostedStatuses.anthropic ?? false,
-          google: hostedStatuses.google ?? false,
-          openrouter: hostedStatuses.openrouter ?? false,
-        },
-        localStatuses,
-        lastCheckedAt,
-        localErrors,
-      ),
+    if (localModelsResult.status === "fulfilled") {
+      const parsedLocalModels = LocalProviderModelsSchema.parse(localModelsResult.value);
+
+      discoveredModels = {
+        ollama: parsedLocalModels.ollama ?? [],
+      };
+
+      if ((parsedLocalModels.ollama?.length ?? 0) > 0) {
+        localStatuses.ollama = true;
+      }
+    }
+
+    if (localResult.status === "rejected" && localModelsResult.status === "rejected") {
+      localErrors.ollama = toErrorMessage(localResult.reason);
+    } else if (localModelsResult.status === "rejected") {
+      localErrors.ollama = toErrorMessage(localModelsResult.reason);
+    }
+
+    const statuses = buildSuccessStatusMap(
+      {
+        openai: hostedStatuses.openai ?? false,
+        anthropic: hostedStatuses.anthropic ?? false,
+        google: hostedStatuses.google ?? false,
+        openrouter: hostedStatuses.openrouter ?? false,
+      },
+      localStatuses,
+      lastCheckedAt,
+      localErrors,
     );
+    appStore.getState().setApiKeyStatuses(statuses);
+    syncModelCatalog(statuses, discoveredModels);
   } catch (error) {
     const message = toErrorMessage(error);
     appStore.getState().setApiKeyStatuses(buildFailureStatusMap(lastCheckedAt, message));
@@ -182,6 +241,7 @@ export async function saveApiKey(provider: CredentialProviderId, key: string): P
       lastCheckedAt,
       error: null,
     });
+    syncModelCatalog(appStore.getState().apiKeyStatuses);
   } catch (error) {
     const message = toErrorMessage(error);
     const currentStatus = getStoredStatus(validatedProvider);
@@ -214,6 +274,7 @@ export async function removeApiKey(provider: CredentialProviderId): Promise<void
       lastCheckedAt,
       error: null,
     });
+    syncModelCatalog(appStore.getState().apiKeyStatuses);
   } catch (error) {
     const message = toErrorMessage(error);
     const currentStatus = getStoredStatus(validatedProvider);

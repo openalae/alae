@@ -19,6 +19,11 @@ const reportFixture: SynthesisReport = {
   prompt: "Evaluate whether the repository layer should use PGlite.",
   summary: "PGlite should own the local reasoning tree persistence boundary.",
   status: "ready",
+  candidateMode: "single",
+  pendingJudge: false,
+  reportStage: "resolved",
+  judgeStatus: "completed",
+  executionPlan: null,
   consensus: {
     summary: "A single local Postgres-like store keeps the conversation tree queryable.",
     items: [

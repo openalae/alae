@@ -1,36 +1,41 @@
 import { useEffect } from "react";
 import {
-  Search,
+  ChevronDown,
+  ChevronUp,
+  Database,
   PanelLeft,
   PanelRight,
-  Database,
-  Radio,
-  Cpu,
-  MemoryStick,
-  Settings,
-  Puzzle,
   Plus,
+  Puzzle,
+  Radio,
+  Search,
+  Settings,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useSettingsStore } from "@/store/settings";
+
 import { Button } from "@/components/ui/button";
-
-import {
-  ReasoningTreeExplorer,
-  type ReasoningTreeConversationSummary,
-} from "@/features/reasoning-tree";
 import { SettingsModal } from "@/features/settings";
+import { ReasoningTreeExplorer, type ReasoningTreeConversationSummary } from "@/features/reasoning-tree";
+import { toggleTruthPanel } from "@/features/truth-panel/controller";
 import { TruthPanel } from "@/features/truth-panel";
-import { ProgressiveWorkspace, useWorkspaceController, GlobalInputShell } from "@/features/workspace";
+import {
+  GlobalInputShell,
+  ProgressiveWorkspace,
+  useWorkspaceController,
+  type WorkspaceController,
+} from "@/features/workspace";
+import { selectLatestSynthesisReport, useAppStore } from "@/store";
+import { useSettingsStore } from "@/store/settings";
 
-
-
-/* ─────────────────────────────────────────
- *  Top Navigation Bar (Simplified)
- * ───────────────────────────────────────── */
 function TopNavBar() {
   const { t } = useTranslation();
-  const { toggleLeftPanel, toggleRightPanel, isLeftPanelOpen, isRightPanelOpen, openSettingsModal } = useSettingsStore();
+  const {
+    toggleLeftPanel,
+    toggleRightPanel,
+    isLeftPanelOpen,
+    isRightPanelOpen,
+    openSettingsModal,
+  } = useSettingsStore();
 
   return (
     <header className="z-50 flex h-12 w-full shrink-0 items-center justify-between border-b border-border/30 bg-surface px-4">
@@ -44,12 +49,12 @@ function TopNavBar() {
         >
           <PanelLeft className="h-4 w-4" />
         </Button>
-        <div className="font-headline text-lg font-bold tracking-tighter text-primary select-none mr-2">
+        <div className="mr-2 select-none font-headline text-lg font-bold tracking-tighter text-primary">
           {t("ALAE")}
         </div>
         <nav className="hidden items-center gap-1 md:flex">
           <a
-            className="rounded-md px-3 py-1.5 text-sm font-medium transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             href="#"
           >
             <span className="flex items-center gap-1.5">
@@ -82,45 +87,139 @@ function TopNavBar() {
   );
 }
 
-/* ─────────────────────────────────────────
- *  Bottom Status Bar
- * ───────────────────────────────────────── */
+function formatRunPhaseLabel(
+  phase: WorkspaceController["runPhase"],
+  t: (key: string) => string,
+) {
+  if (phase === "preflight") return t("Preflight");
+  if (phase === "candidate_running") return t("Candidates running");
+  if (phase === "conflicts_pending") return t("Conflicts pending");
+  if (phase === "judge_running") return t("Judge running");
+  if (phase === "completed") return t("Completed");
+  if (phase === "failed") return t("Failed");
+  return t("Idle");
+}
+
 function BottomStatusBar() {
   const { t } = useTranslation();
-  const { developerMode } = useSettingsStore();
-
-  if (!developerMode) return null;
+  const runPhase = useAppStore((state) => state.runPhase);
+  const isTruthPanelOpen = useAppStore((state) => state.isTruthPanelOpen);
+  const truthPanelSnapshot = useAppStore((state) => state.truthPanelSnapshot);
+  const modelCatalog = useAppStore((state) => state.modelCatalog);
+  const readyModelCount = Object.values(modelCatalog)
+    .flat()
+    .filter((model) => model.availability === "ready").length;
+  const traceCount = truthPanelSnapshot?.events.length ?? 0;
+  const runCount = truthPanelSnapshot?.runSummary.totalRuns ?? 0;
 
   return (
-    <footer className="z-50 flex h-7 w-full shrink-0 items-center gap-6 border-t border-border/30 bg-surface-container-lowest px-4 font-mono text-[10px] uppercase tracking-widest">
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        <Database className="h-3 w-3" />
-        <span>{t("PGLite")}</span>
-      </div>
-      <div className="flex items-center gap-1.5 text-primary">
-        <Radio className="h-3 w-3" />
-        <span>{t("API: Active")}</span>
-      </div>
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        <Cpu className="h-3 w-3" />
-        <span>CPU: 12%</span>
-      </div>
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        <MemoryStick className="h-3 w-3" />
-        <span>MEM: 1.2GB</span>
+    <footer className="z-50 flex h-8 w-full shrink-0 items-center gap-4 border-t border-border/30 bg-surface-container-lowest px-4 font-mono text-[10px] uppercase tracking-widest">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap">
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <Database className="h-3 w-3" />
+          <span>{t("PGLite")}</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleTruthPanel}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-background/70 px-2 py-1 text-primary transition-colors hover:bg-accent"
+          aria-expanded={isTruthPanelOpen}
+        >
+          <Radio className="h-3 w-3" />
+          <span>{readyModelCount > 0 ? t("API Connected") : t("API Pending")}</span>
+          <span className="text-muted-foreground">{t("{{count}} models ready", { count: readyModelCount })}</span>
+          {isTruthPanelOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+        </button>
+
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <PanelRight className="h-3 w-3" />
+          <span>{t("Run phase")}: {formatRunPhaseLabel(runPhase, t)}</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleTruthPanel}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-background/70 px-2 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <span>{t("Logs")}</span>
+          <span>{traceCount}</span>
+          <span className="text-border">/</span>
+          <span>{t("Runs")}</span>
+          <span>{runCount}</span>
+        </button>
       </div>
     </footer>
   );
 }
 
-/* ─────────────────────────────────────────
- *  App Shell (main layout)
- * ───────────────────────────────────────── */
+function WorkspaceInspector(props: { controller: WorkspaceController }) {
+  const { t } = useTranslation();
+  const latestSynthesisReport = props.controller.latestSynthesisReport;
+  const activeTitle =
+    props.controller.selectedConversation?.title ??
+    props.controller.selectedNode?.title ??
+    t("No saved analysis selected");
+  const candidateCount =
+    latestSynthesisReport?.modelRuns.filter((run) => run.role !== "judge").length ??
+    props.controller.selectedExecutionPlan.candidateSlots.length;
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-border/20 px-4 py-2">
+        <PanelRight className="h-3.5 w-3.5 text-primary" />
+        <span className="text-xs font-bold uppercase tracking-widest text-primary">
+          {t("Inspector")}
+        </span>
+      </div>
+
+      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <section className="rounded-xl border border-border/50 bg-card/70 p-4">
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {t("Current context")}
+          </div>
+          <p className="mt-2 text-sm font-medium text-foreground">{activeTitle}</p>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            {t("The detailed model status and logs now live in the bottom diagnostics panel.")}
+          </p>
+        </section>
+
+        <section className="space-y-2 rounded-xl border border-border/50 bg-card/70 p-4">
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {t("Next run status")}
+          </div>
+          <div className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              {t("Run phase")}
+            </div>
+            <div className="mt-1 text-sm font-medium text-foreground">
+              {formatRunPhaseLabel(props.controller.runPhase, t)}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              {t("Candidate windows")}
+            </div>
+            <div className="mt-1 text-sm font-medium text-foreground">{candidateCount}</div>
+          </div>
+          <div className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              {t("Report stage")}
+            </div>
+            <div className="mt-1 text-sm font-medium text-foreground">
+              {latestSynthesisReport?.reportStage ?? formatRunPhaseLabel(props.controller.runPhase, t)}
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell() {
   const { t } = useTranslation();
   const { isRightPanelOpen, isLeftPanelOpen, setLeftPanelOpen, setRightPanelOpen } = useSettingsStore();
 
-  // Responsive logic
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 1024) {
@@ -128,60 +227,55 @@ export function AppShell() {
         setRightPanelOpen(false);
       }
     };
+
     window.addEventListener("resize", handleResize);
-    // Trigger once on mount
     handleResize();
     return () => window.removeEventListener("resize", handleResize);
   }, [setLeftPanelOpen, setRightPanelOpen]);
 
   const controller = useWorkspaceController();
-
   const explorerConversations: ReasoningTreeConversationSummary[] = controller.conversationSummaries;
-
+  const latestSynthesisReport = useAppStore(selectLatestSynthesisReport);
+  const truthPanelSnapshot = useAppStore((state) => state.truthPanelSnapshot);
+  const runtimeErrorMessage = useAppStore((state) => state.runtimeErrorMessage);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
-      {/* Top Navigation Bar */}
       <TopNavBar />
-
-      {/* Settings Modal */}
       <SettingsModal />
 
-      {/* Main 3-Column Layout */}
       <div className="flex flex-1 overflow-hidden">
-
-        {/* Left Sidebar */}
         <aside
           className={`flex shrink-0 flex-col overflow-hidden border-r border-border/30 bg-surface-container-lowest text-sm transition-[width] duration-300 ease-in-out ${
             isLeftPanelOpen ? "w-60" : "w-0"
           }`}
         >
-          {isLeftPanelOpen && (
+          {isLeftPanelOpen ? (
             <div className="flex h-full w-60 flex-col overflow-hidden">
-              {/* Search Sidebar Header (Replaces Static Explorer Header) */}
-              <div className="flex flex-col gap-2 px-3 py-3 border-b border-border/20">
-                <Button 
-                  onClick={controller.startNewConversation}
-                  className="w-full justify-start gap-2 bg-primary/5 hover:bg-primary/10 text-primary border-primary/10 h-9"
-                  variant="outline"
-                  size="sm"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span className="text-xs font-bold uppercase tracking-widest">{t("New Chat")}</span>
-                </Button>
-                <div className="relative group">
-                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
-                    <Search className="h-3.5 w-3.5" />
+              <div className="border-b border-border/20 px-3 py-3">
+                <div className="flex flex-col gap-2">
+                  <Button
+                    onClick={controller.startNewConversation}
+                    className="h-9 w-full justify-start gap-2 border-primary/10 bg-primary/5 text-primary hover:bg-primary/10"
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="text-xs font-bold uppercase tracking-widest">{t("New Chat")}</span>
+                  </Button>
+                  <div className="group relative">
+                    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary">
+                      <Search className="h-3.5 w-3.5" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder={t("Search conversations...")}
+                      className="w-full rounded-lg border border-transparent bg-accent/10 py-1.5 pl-8 pr-3 text-xs outline-none transition-all placeholder:text-muted-foreground/50 hover:bg-accent/20 focus:border-primary/20 focus:bg-background"
+                    />
                   </div>
-                  <input 
-                    type="text" 
-                    placeholder={t("Search conversations...")}
-                    className="w-full bg-accent/10 hover:bg-accent/20 focus:bg-background border border-transparent focus:border-primary/20 rounded-lg py-1.5 pl-8 pr-3 text-xs outline-none transition-all placeholder:text-muted-foreground/50"
-                  />
                 </div>
               </div>
 
-              {/* Explorer Content */}
               <div className="flex-1 overflow-y-auto px-2 py-2">
                 <ReasoningTreeExplorer
                   conversations={explorerConversations}
@@ -190,44 +284,30 @@ export function AppShell() {
                 />
               </div>
             </div>
-          )}
+          ) : null}
         </aside>
 
-        {/* Center Workspace */}
         <main className="relative flex flex-1 flex-col overflow-hidden bg-surface">
           <div className="mx-auto flex h-full w-full flex-col">
             <ProgressiveWorkspace controller={controller} />
           </div>
-          {/* Global Input Shell floating over the workspace */}
           <GlobalInputShell controller={controller} />
         </main>
 
-        {/* Right Inspector Panel */}
         <aside
           className={`flex shrink-0 flex-col overflow-hidden border-l border-border/30 bg-surface-container-low transition-[width] duration-300 ease-in-out ${
             isRightPanelOpen ? "w-80" : "w-0"
           }`}
         >
-          {isRightPanelOpen && (
+          {isRightPanelOpen ? (
             <div className="flex h-full w-80 flex-col overflow-hidden">
-              {/* Panel Tabs */}
-              <div className="flex items-center gap-2 border-b border-border/20 px-4 py-2">
-                <PanelRight className="h-3.5 w-3.5 text-primary" />
-                <span className="text-xs font-bold uppercase tracking-widest text-primary">
-                  {t("Inspector")}
-                </span>
-              </div>
-
-              {/* Panel Content — only TruthPanel, ProviderAccessCard moved to Settings */}
-              <div className="flex-1 space-y-4 overflow-y-auto p-4">
-                <TruthPanel />
-              </div>
+              <WorkspaceInspector controller={controller} />
             </div>
-          )}
+          ) : null}
         </aside>
       </div>
 
-      {/* Bottom Status Bar */}
+      {latestSynthesisReport || truthPanelSnapshot || runtimeErrorMessage ? <TruthPanel /> : null}
       <BottomStatusBar />
     </div>
   );

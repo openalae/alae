@@ -8,6 +8,7 @@ export {
   secureStoreUnavailableMessage,
 } from "@/features/settings/api-key-bridge";
 export {
+  buildCatalogItemId,
   credentialProviderIds,
   getProviderAccessSectionId,
   getProviderDefinition,
@@ -18,5 +19,6 @@ export {
 } from "@/features/settings/providers";
 export type {
   CredentialProviderId,
+  ModelCatalogItem,
   SupportedProviderId,
 } from "@/features/settings/providers";

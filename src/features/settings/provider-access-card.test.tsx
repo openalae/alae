@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import {
+  buildModelCatalogRecord,
   getProviderAccessSectionId,
   providerAccessCardId,
 } from "@/features/settings/providers";
@@ -48,11 +49,31 @@ describe("ProviderAccessCard", () => {
             error: null,
           },
           ollama: {
-            configured: false,
+            configured: true,
             lastCheckedAt: "2026-03-17T00:00:00.000Z",
             error: null,
           },
         },
+        modelCatalog: buildModelCatalogRecord({
+          providerConfiguredMap: {
+            openai: true,
+            anthropic: false,
+            google: false,
+            openrouter: false,
+            ollama: true,
+          },
+          discoveredModels: {
+            ollama: [
+              {
+                id: "ollama:qwen3:8b",
+                modelId: "qwen3:8b",
+                label: "qwen3:8b",
+                sizeBytes: 4 * 1024 * 1024 * 1024,
+                modifiedAt: "2026-03-17T00:00:00.000Z",
+              },
+            ],
+          },
+        }),
       }),
     );
   });
@@ -68,7 +89,10 @@ describe("ProviderAccessCard", () => {
     expect(screen.getByText("OpenRouter")).toBeInTheDocument();
     expect(screen.getByText("Ollama")).toBeInTheDocument();
     expect(screen.getByText("Ready")).toBeInTheDocument();
-    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Available")).toBeInTheDocument();
+    expect(screen.getByText("GPT-5 Mini")).toBeInTheDocument();
+    expect(screen.getByText("OpenRouter Free")).toBeInTheDocument();
+    expect(screen.getByText("qwen3:8b")).toBeInTheDocument();
   });
 
   it("renders panel-level refresh state from the shell", () => {
@@ -137,6 +161,8 @@ describe("ProviderAccessCard", () => {
       screen.getAllByText(/Keep Ollama running at http:\/\/127\.0\.0\.1:11434\/v1/i),
     ).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Save key" })).toHaveLength(4);
+    expect(screen.getByText("Detected models")).toBeInTheDocument();
+    expect(screen.getByText("qwen3:8b")).toBeInTheDocument();
   });
 
   it("calls the refresh callback when requested", () => {

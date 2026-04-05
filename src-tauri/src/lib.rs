@@ -10,7 +10,8 @@ pub fn run() {
             credentials::delete_api_key,
             credentials::get_api_key_statuses,
             credentials::get_api_key,
-            local_providers::get_local_provider_statuses
+            local_providers::get_local_provider_statuses,
+            local_providers::get_local_provider_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

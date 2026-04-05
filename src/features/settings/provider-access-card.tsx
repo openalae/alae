@@ -31,6 +31,19 @@ function getErrorMessage(error: unknown) {
   return "Unexpected secure store error.";
 }
 
+function formatModelSize(sizeBytes: number | null) {
+  if (sizeBytes === null) return null;
+
+  const sizeInGb = sizeBytes / (1024 ** 3);
+  return `${sizeInGb.toFixed(sizeInGb >= 10 ? 0 : 1)} GB`;
+}
+
+function getSourceBadgeClasses(source: "local" | "free" | "paid") {
+  if (source === "local") return "badge-info";
+  if (source === "free") return "badge-success";
+  return "badge-neutral";
+}
+
 type ProviderAccessCardProps = {
   isRefreshing?: boolean;
   panelError?: string | null;
@@ -44,6 +57,7 @@ export function ProviderAccessCard({
 }: ProviderAccessCardProps) {
   const { t } = useTranslation();
   const apiKeyStatuses = useAppStore((state) => state.apiKeyStatuses);
+  const modelCatalog = useAppStore((state) => state.modelCatalog);
   const [inputValues, setInputValues] = useState<Record<SupportedProviderId, string>>(() =>
     buildProviderRecord(() => ""),
   );
@@ -140,6 +154,7 @@ export function ProviderAccessCard({
             lastCheckedAt: null,
             error: null,
           };
+          const providerModels = modelCatalog[provider.id] ?? [];
           const isBusy = rowActions[provider.id] !== "idle";
 
           const statusLabel = requiresApiKey
@@ -166,6 +181,12 @@ export function ProviderAccessCard({
                   ? `Runtime detected at ${provider.connectionHint?.match(/http:\/\/[^\s]+/u)?.[0] ?? "the local endpoint"}.`
                   : "No local runtime responded on the expected Ollama endpoint."
                 : "Run a refresh to check the local runtime.");
+          const modelSectionTitle = requiresApiKey ? t("Suggested models") : t("Detected models");
+          const emptyModelMessage = requiresApiKey
+            ? t("No curated models are available for this provider yet.")
+            : status.configured
+              ? t("No local models were discovered yet. Pull a model in Ollama, then refresh.")
+              : t("Refresh after Ollama starts to discover local models.");
 
           return (
             <section
@@ -222,6 +243,47 @@ export function ProviderAccessCard({
                   <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{provider.connectionHint}</p>
                 </div>
               )}
+
+              <div className="mt-3 rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium">{modelSectionTitle}</p>
+                  <span className="text-[11px] text-muted-foreground">
+                    {t("{{count}} total", { count: providerModels.length })}
+                  </span>
+                </div>
+
+                {providerModels.length > 0 ? (
+                  <div className="mt-2 grid gap-2">
+                    {providerModels.map((model) => {
+                      const sizeLabel = formatModelSize(model.sizeBytes);
+
+                      return (
+                        <div
+                          key={model.id}
+                          className="rounded-md border border-border/50 bg-card/80 px-2.5 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium">{model.label}</p>
+                            <span
+                              className={`inline-flex rounded border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${getSourceBadgeClasses(model.source)}`}
+                            >
+                              {model.source}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            {model.modelId}
+                            {sizeLabel ? ` • ${sizeLabel}` : ""}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                    {emptyModelMessage}
+                  </p>
+                )}
+              </div>
 
               <p className="mt-2 text-xs leading-5 text-muted-foreground">{feedback}</p>
             </section>

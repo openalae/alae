@@ -1,3 +1,4 @@
+import { buildModelCatalogRecord } from "@/features/settings/providers";
 import type { AppStorePreloadedState, AppStoreState } from "@/store/types";
 
 export const initialAppStoreState: AppStoreState = {
@@ -6,11 +7,13 @@ export const initialAppStoreState: AppStoreState = {
   currentNodeId: null,
   latestSynthesisReport: null,
   runStatus: "idle",
+  runPhase: "idle",
   runtimeErrorMessage: null,
   lastRunCompletedAt: null,
   isTruthPanelOpen: false,
   truthPanelSnapshot: null,
   apiKeyStatuses: {},
+  modelCatalog: buildModelCatalogRecord(),
 };
 
 export function createInitialAppStoreState(
@@ -22,6 +25,10 @@ export function createInitialAppStoreState(
     apiKeyStatuses: {
       ...initialAppStoreState.apiKeyStatuses,
       ...(preloadedState.apiKeyStatuses ?? {}),
+    },
+    modelCatalog: {
+      ...initialAppStoreState.modelCatalog,
+      ...(preloadedState.modelCatalog ?? {}),
     },
   };
 }

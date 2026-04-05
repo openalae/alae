@@ -55,6 +55,11 @@ const report: SynthesisReport = {
   prompt: "Inspect the latest telemetry.",
   summary: "The report rendered successfully.",
   status: "partial",
+  candidateMode: "single",
+  pendingJudge: false,
+  reportStage: "resolved",
+  judgeStatus: "completed",
+  executionPlan: null,
   consensus: {
     summary: "One run completed with a fallback path.",
     items: [],
@@ -167,7 +172,11 @@ import { useSettingsStore } from "@/store/settings";
 describe("App", () => {
   beforeEach(() => {
     appStore.setState(createInitialAppStoreState());
-    useSettingsStore.setState({ developerMode: true });
+    useSettingsStore.setState({
+      developerMode: true,
+      isLeftPanelOpen: true,
+      isRightPanelOpen: true,
+    });
     refreshApiKeyStatusesMock.mockReset();
     saveApiKeyMock.mockReset();
     removeApiKeyMock.mockReset();
@@ -194,8 +203,12 @@ describe("App", () => {
     ).toBeInTheDocument();
     // Explorer shows "Chat History" label
     expect(screen.getByText("Chat History")).toBeInTheDocument();
-    // Model status is in the right inspector panel
-    expect(screen.getByRole("heading", { level: 2, name: "Model status" })).toBeInTheDocument();
+    // Right rail now keeps lightweight inspector copy
+    expect(
+      screen.getByText("The detailed model status and logs now live in the bottom diagnostics panel."),
+    ).toBeInTheDocument();
+    // Bottom bar is always present for opening diagnostics
+    expect(screen.getByText(/API Pending/i)).toBeInTheDocument();
     // Repository is created on mount
     await waitFor(() => {
       expect(createReasoningTreeRepositoryMock).toHaveBeenCalledTimes(1);
@@ -215,7 +228,7 @@ describe("App", () => {
     expect(screen.getByText("Advanced")).toBeInTheDocument();
   });
 
-  it("shares truth-panel toggle state between the workspace header and the right rail", async () => {
+  it("toggles the bottom diagnostics panel from the status bar", async () => {
     repositoryMock.loadLatestConversation.mockResolvedValue(createRestoredConversation());
     repositoryMock.listConversations.mockResolvedValue([
       {
@@ -235,18 +248,18 @@ describe("App", () => {
       await screen.findByText(/The report rendered successfully/i),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Show details/i }));
+    fireEvent.click(screen.getByRole("button", { name: /API Pending/i }));
 
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(true);
     });
-    expect(screen.getByText("Overview")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Model status" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Hide details/i }));
 
     await waitFor(() => {
       expect(appStore.getState().isTruthPanelOpen).toBe(false);
     });
-    expect(screen.queryByRole("heading", { name: "Overview" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "Model status" })).not.toBeInTheDocument();
   });
 });

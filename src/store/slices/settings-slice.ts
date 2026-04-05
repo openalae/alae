@@ -28,4 +28,19 @@ export const createSettingsSlice: AppStoreSlice<SettingsActions> = (set) => ({
     set({
       apiKeyStatuses: initialAppStoreState.apiKeyStatuses,
     }),
+  setModelCatalog: (catalog) =>
+    set({
+      modelCatalog: catalog,
+    }),
+  setProviderModelCatalog: (provider, models) =>
+    set((state) => ({
+      modelCatalog: {
+        ...state.modelCatalog,
+        [provider]: models,
+      },
+    })),
+  resetModelCatalog: () =>
+    set({
+      modelCatalog: initialAppStoreState.modelCatalog,
+    }),
 });

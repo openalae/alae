@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildExecutionPlanFromModelSelection,
+  buildExecutionPlanFromPreset,
+} from "@/features/consensus";
+import { buildModelCatalogRecord } from "@/features/settings/providers";
+import {
   resolveWorkspaceRunMode,
   runWorkspaceSynthesis,
   type WorkspaceRunResult,
@@ -26,6 +31,11 @@ const stubResult: WorkspaceRunResult = {
     prompt: "Design module 7.",
     summary: "Keep the synthesis report in the center column.",
     status: "ready",
+    candidateMode: "single",
+    pendingJudge: false,
+    reportStage: "resolved",
+    judgeStatus: "completed",
+    executionPlan: null,
     consensus: {
       summary: "The workspace should stay report-first.",
       items: [],
@@ -129,17 +139,69 @@ describe("workspace controller helpers", () => {
     });
 
     expect(result.effectiveMode).toBe("mock");
-    expect(createMockRegistry).toHaveBeenCalledWith("freeDefault");
+    const executionPlan = buildExecutionPlanFromPreset("freeDefault", "auto");
+    expect(createMockRegistry).toHaveBeenCalledWith(executionPlan);
     expect(runSynthesisImpl).toHaveBeenCalledWith(
       {
         prompt: "Draft module 7",
         mode: "mock",
         presetId: "freeDefault",
+        executionPlan,
+        judgeMode: undefined,
+        language: undefined,
       },
       {
         mockRegistry: createMockRegistry.mock.results[0]?.value,
       },
     );
+  });
+
+  it("supports custom execution plans when the selected models do not match a preset exactly", async () => {
+    const runSynthesisImpl = vi.fn().mockResolvedValue(stubResult);
+    const executionPlan = buildExecutionPlanFromModelSelection({
+      modelCatalog: buildModelCatalogRecord({
+        providerConfiguredMap: {
+          openrouter: true,
+          ollama: true,
+        },
+        discoveredModels: {
+          ollama: [
+            {
+              id: "ollama:deepseek-r1:8b",
+              modelId: "deepseek-r1:8b",
+              label: "deepseek-r1:8b",
+              sizeBytes: 123,
+              modifiedAt: "2026-03-18T00:00:00.000Z",
+            },
+          ],
+        },
+      }),
+      selection: {
+        candidateModelIds: ["openrouter:openrouter/free", "ollama:deepseek-r1:8b"],
+        judgeModelId: "openrouter:openrouter/free",
+      },
+      conflictMode: "manual",
+      label: "Custom",
+    });
+
+    const result = await runWorkspaceSynthesis("Draft module 7", {
+      apiKeyStatuses: {
+        openrouter: configuredStatus,
+        ollama: configuredStatus,
+      },
+      executionPlan,
+      runSynthesisImpl,
+    });
+
+    expect(result.effectiveMode).toBe("real");
+    expect(runSynthesisImpl).toHaveBeenCalledWith({
+      prompt: "Draft module 7",
+      mode: "real",
+      presetId: "freeDefault",
+      executionPlan,
+      judgeMode: undefined,
+      language: undefined,
+    });
   });
 
   it("runs without a mock registry when Auto resolves to real", async () => {
@@ -153,10 +215,14 @@ describe("workspace controller helpers", () => {
     });
 
     expect(result.effectiveMode).toBe("real");
+    const executionPlan = buildExecutionPlanFromPreset("freeDefault", "auto");
     expect(runSynthesisImpl).toHaveBeenCalledWith({
       prompt: "Draft module 7",
       mode: "real",
       presetId: "freeDefault",
+      executionPlan,
+      judgeMode: undefined,
+      language: undefined,
     });
   });
 });

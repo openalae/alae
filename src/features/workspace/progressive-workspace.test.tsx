@@ -63,6 +63,11 @@ const report = {
   prompt: "Build module 9.",
   summary: "Persist the workspace output and recover the latest local conversation.",
   status: "partial" as const,
+  candidateMode: "dual" as const,
+  pendingJudge: false,
+  reportStage: "resolved" as const,
+  judgeStatus: "completed" as const,
+  executionPlan: null,
   consensus: {
     summary: "The MVP should restore persisted conversations before allowing new submissions.",
     items: [
@@ -309,7 +314,11 @@ function createEmptyConversation(options: {
 describe("ProgressiveWorkspace", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    useSettingsStore.setState({ developerMode: true });
+    useSettingsStore.setState({
+      developerMode: true,
+      judgeMode: "auto",
+      defaultPresetId: "freeDefault",
+    });
     runSynthesisMock.mockReset();
     createReasoningTreeRepositoryMock.mockClear();
     repositoryMock.createConversation.mockReset();
@@ -419,7 +428,7 @@ describe("ProgressiveWorkspace", () => {
       truthPanelSnapshot,
     });
 
-    // Report summary visible inside default-open accordion
+    // Report summary is visible in the report header
     expect(
       await screen.findByText(
         /Persist the workspace output and recover the latest local conversation/i,
@@ -441,8 +450,8 @@ describe("ProgressiveWorkspace", () => {
       expect(appStore.getState().currentNodeId).toBe("node-module-9");
     });
 
-    // Model run content is visible in the split view panels
-    expect(screen.getByText("{\"summary\":\"Judge run\"}")).toBeInTheDocument();
+    // Candidate output is visible in the split view panel
+    expect(screen.getByText("Strong run")).toBeInTheDocument();
   });
 
   it("persists a failed node when execution throws and keeps the previous report visible", async () => {
@@ -574,6 +583,81 @@ describe("ProgressiveWorkspace", () => {
     });
   });
 
+  it("submits a custom execution plan after directly changing candidate and judge models", async () => {
+    const createdConversation = createEmptyConversation();
+    const persistedConversation = createConversationSnapshot();
+
+    repositoryMock.createConversation.mockResolvedValue(createdConversation);
+    repositoryMock.appendNode.mockResolvedValue(persistedConversation.nodes[0]);
+    repositoryMock.loadConversation.mockResolvedValue(persistedConversation);
+    runSynthesisMock.mockResolvedValue({
+      report,
+      truthPanelSnapshot,
+    });
+
+    render(<TestWorkspace />);
+
+    const promptField = await screen.findByLabelText("Question");
+    fireEvent.click(screen.getByText(/Free-first/i));
+
+    await waitFor(() => {
+      expect(screen.getByText("Run Setup")).toBeInTheDocument();
+    });
+
+    const countButton = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "3",
+    );
+    expect(countButton).toBeTruthy();
+    fireEvent.click(countButton!);
+
+    const selectors = Array.from(document.querySelectorAll("select"));
+    expect(selectors).toHaveLength(4);
+
+    fireEvent.change(selectors[1], {
+      target: { value: "openai:gpt-5-mini" },
+    });
+    fireEvent.change(selectors[3], {
+      target: { value: "anthropic:claude-sonnet-4-20250514" },
+    });
+
+    fireEvent.change(promptField, { target: { value: "Compare a custom model mix." } });
+    fireEvent.keyDown(promptField, { key: "Enter", metaKey: true });
+
+    await waitFor(() => {
+      expect(runSynthesisMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: "Compare a custom model mix.",
+          presetId: "freeDefault",
+          executionPlan: expect.objectContaining({
+            source: {
+              kind: "custom",
+              label: null,
+            },
+            candidateSlots: expect.arrayContaining([
+              expect.objectContaining({
+                id: "fast-1",
+                provider: "openai",
+                modelId: "gpt-5-mini",
+              }),
+            ]),
+            judgeSlot: expect.objectContaining({
+              provider: "anthropic",
+              modelId: "claude-sonnet-4-20250514",
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          mockRegistry: expect.any(Object),
+        }),
+      );
+    });
+
+    expect(window.localStorage.getItem("alae.workspace.selectedPresetId")).toBeNull();
+    expect(window.localStorage.getItem("alae.workspace.selectedExecutionPlan")).toContain(
+      "\"kind\":\"custom\"",
+    );
+  });
+
   it("restores the previously selected preset from local storage", async () => {
     window.localStorage.setItem("alae.workspace.selectedPresetId", "crossVendorDefault");
 
@@ -586,10 +670,32 @@ describe("ProgressiveWorkspace", () => {
   });
 
   it("persists preset changes for the next session", async () => {
+    window.localStorage.setItem(
+      "alae.workspace.selectedExecutionPlan",
+      JSON.stringify({
+        version: 1,
+        candidateSlots: [
+          {
+            id: "strong",
+            provider: "openrouter",
+            modelId: "openrouter/free",
+            role: "strong",
+            outputType: "candidate",
+          },
+        ],
+        judgeSlot: null,
+        conflictMode: "auto",
+        source: {
+          kind: "custom",
+          label: null,
+        },
+      }),
+    );
+
     render(<TestWorkspace />);
 
-    // Open preset picker and select Cross-vendor
-    const presetLabel = await screen.findByText(/Free-first/i);
+    // Start from a restored custom setup, then switch back to a template.
+    const presetLabel = await screen.findByText(/Custom setup/i);
     fireEvent.click(presetLabel);
 
     await waitFor(() => {
@@ -601,6 +707,65 @@ describe("ProgressiveWorkspace", () => {
       expect(window.localStorage.getItem("alae.workspace.selectedPresetId")).toBe(
         "crossVendorDefault",
       );
+      expect(window.localStorage.getItem("alae.workspace.selectedExecutionPlan")).toBeNull();
     });
+  });
+
+  it("restores a previously saved custom execution plan before falling back to presets", async () => {
+    window.localStorage.setItem("alae.workspace.selectedPresetId", "crossVendorDefault");
+    window.localStorage.setItem(
+      "alae.workspace.selectedExecutionPlan",
+      JSON.stringify({
+        version: 1,
+        candidateSlots: [
+          {
+            id: "strong",
+            provider: "openrouter",
+            modelId: "openrouter/free",
+            role: "strong",
+            outputType: "candidate",
+          },
+          {
+            id: "fast-1",
+            provider: "openai",
+            modelId: "gpt-5-mini",
+            role: "fast",
+            outputType: "candidate",
+          },
+        ],
+        judgeSlot: {
+          id: "judge",
+          provider: "anthropic",
+          modelId: "claude-sonnet-4-20250514",
+          role: "judge",
+          outputType: "judge",
+        },
+        conflictMode: "manual",
+        source: {
+          kind: "custom",
+          label: null,
+        },
+      }),
+    );
+
+    render(<TestWorkspace />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Custom setup")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Custom setup"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Run Setup")).toBeInTheDocument();
+    });
+
+    const selectors = Array.from(document.querySelectorAll("select"));
+    expect(selectors).toHaveLength(3);
+    expect((selectors[0] as HTMLSelectElement).value).toBe("openrouter:openrouter/free");
+    expect((selectors[1] as HTMLSelectElement).value).toBe("openai:gpt-5-mini");
+    expect((selectors[2] as HTMLSelectElement).value).toBe(
+      "anthropic:claude-sonnet-4-20250514",
+    );
   });
 });

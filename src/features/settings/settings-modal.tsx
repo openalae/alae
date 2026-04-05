@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Sun, Moon, Languages, Code2, KeyRound } from "lucide-react";
+import { X, Sun, Moon, Languages, Code2, KeyRound, Layers, BrainCircuit, Zap } from "lucide-react";
 
 import { useSettingsStore } from "@/store/settings";
 import { ProviderAccessCard } from "@/features/settings/provider-access-card";
 import { refreshApiKeyStatuses } from "@/features/settings/api-key-bridge";
+import { synthesisPresetDefinitions, getPresetCandidateCount } from "@/features/consensus/presets";
 import { useState } from "react";
 
 function getErrorMessage(error: unknown) {
@@ -13,7 +14,7 @@ function getErrorMessage(error: unknown) {
   return "Unable to refresh provider access state.";
 }
 
-type SettingsTab = "appearance" | "providers" | "advanced";
+type SettingsTab = "appearance" | "providers" | "presets" | "advanced";
 
 export function SettingsModal() {
   const { t } = useTranslation();
@@ -28,10 +29,13 @@ export function SettingsModal() {
     setDeveloperMode,
     activeSettingsTab,
     setActiveSettingsTab,
+    judgeMode,
+    setJudgeMode,
+    defaultPresetId,
+    setDefaultPresetId,
   } = useSettingsStore();
 
   const overlayRef = useRef<HTMLDivElement>(null);
-
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
 
@@ -47,7 +51,6 @@ export function SettingsModal() {
     }
   };
 
-  // Refresh provider statuses when switching to providers tab
   useEffect(() => {
     if (activeSettingsTab === "providers" && isSettingsModalOpen) {
       void refreshProviders();
@@ -55,7 +58,6 @@ export function SettingsModal() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSettingsTab, isSettingsModalOpen]);
 
-  // Close on Escape
   useEffect(() => {
     if (!isSettingsModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -74,6 +76,7 @@ export function SettingsModal() {
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: "appearance", label: t("Appearance"), icon: <Sun className="h-3.5 w-3.5" /> },
     { id: "providers", label: t("Model providers"), icon: <KeyRound className="h-3.5 w-3.5" /> },
+    { id: "presets", label: t("Templates"), icon: <Layers className="h-3.5 w-3.5" /> },
     { id: "advanced", label: t("Advanced"), icon: <Code2 className="h-3.5 w-3.5" /> },
   ];
 
@@ -83,7 +86,7 @@ export function SettingsModal() {
       onClick={handleOverlayClick}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
     >
-      <div className="relative flex h-[min(600px,85vh)] w-[min(720px,90vw)] flex-col overflow-hidden rounded-2xl border border-border/40 bg-surface shadow-2xl animate-in zoom-in-95 fade-in duration-200">
+      <div className="relative flex h-[min(620px,88vh)] w-[min(760px,92vw)] flex-col overflow-hidden rounded-2xl border border-border/40 bg-surface shadow-2xl animate-in zoom-in-95 fade-in duration-200">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border/30 px-6 py-4">
           <h2 className="text-base font-bold tracking-tight">{t("Settings")}</h2>
@@ -185,6 +188,104 @@ export function SettingsModal() {
                 panelError={providerError}
                 onRefresh={() => void refreshProviders()}
               />
+            )}
+
+            {activeSettingsTab === "presets" && (
+              <div className="space-y-6">
+                {/* Default Template */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-1">{t("Default Template")}</h3>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    {t("Choose the template used to prefill the input toolbar. You can still swap models per run before sending.")}
+                  </p>
+                  <div className="grid gap-2">
+                    {synthesisPresetDefinitions.map((preset) => {
+                      const n = getPresetCandidateCount(preset.id);
+                      const isSelected = defaultPresetId === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => setDefaultPresetId(preset.id)}
+                          className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+                            isSelected
+                              ? "border-primary/50 bg-primary/10 ring-1 ring-primary/20"
+                              : "border-border/50 bg-card/60 hover:bg-accent hover:border-border"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${
+                                isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                              }`}>
+                                {n}
+                              </div>
+                              <div>
+                                <div className="text-sm font-semibold">{t(preset.label)}</div>
+                                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
+                                  {preset.providerSummary}
+                                </div>
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <div className="text-[10px] font-semibold text-primary uppercase tracking-widest">
+                                {t("Default")}
+                              </div>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-muted-foreground pl-10">
+                            {t(preset.description)}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Judge Resolution Mode */}
+                <div className="border-t border-border/30 pt-6">
+                  <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                    <BrainCircuit className="h-4 w-4 text-primary" />
+                    {t("Conflict Resolution")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    {t("When models disagree, choose whether the judge runs automatically or waits for your confirmation.")}
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setJudgeMode("auto")}
+                      className={`flex-1 rounded-xl border px-4 py-3 text-left transition-all ${
+                        judgeMode === "auto"
+                          ? "border-primary/50 bg-primary/10 ring-1 ring-primary/20"
+                          : "border-border/50 bg-card/60 hover:bg-accent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Zap className={`h-4 w-4 ${judgeMode === "auto" ? "text-primary" : "text-muted-foreground"}`} />
+                        <span className="text-sm font-semibold">{t("Auto")}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-5">
+                        {t("Judge runs immediately after candidates finish. Fully automated.")}
+                      </p>
+                    </button>
+                    <button
+                      onClick={() => setJudgeMode("manual")}
+                      className={`flex-1 rounded-xl border px-4 py-3 text-left transition-all ${
+                        judgeMode === "manual"
+                          ? "border-primary/50 bg-primary/10 ring-1 ring-primary/20"
+                          : "border-border/50 bg-card/60 hover:bg-accent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <BrainCircuit className={`h-4 w-4 ${judgeMode === "manual" ? "text-primary" : "text-muted-foreground"}`} />
+                        <span className="text-sm font-semibold">{t("Manual")}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-5">
+                        {t("Candidate results shown first. You decide when to resolve conflicts.")}
+                      </p>
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
 
             {activeSettingsTab === "advanced" && (
