@@ -7,9 +7,12 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Settings2,
 } from "lucide-react";
 
 import type { SynthesisReport } from "@/schema";
+import { useWorkspaceController } from "@/features/workspace/controller";
+import { RecipeEditorSheet } from "@/features/recipe/components/RecipeEditorSheet";
 
 function buildMergedText(report: SynthesisReport, t: (key: string, opts?: Record<string, unknown>) => string) {
   if (report.resolution) {
@@ -67,7 +70,9 @@ export function AssistantTurnCard(props: {
   isRunning?: boolean;
 }) {
   const { t } = useTranslation();
+  const controller = useWorkspaceController();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [recipeOpen, setRecipeOpen] = useState(false);
   const text = buildMergedText(props.report, t);
 
   const conflictCount = props.report.conflicts.length;
@@ -99,6 +104,14 @@ export function AssistantTurnCard(props: {
                 {t("Verified")}
               </span>
             )}
+            
+            <button 
+              onClick={() => setRecipeOpen(true)}
+              className="ml-auto inline-flex items-center gap-1.5 text-[9px] uppercase font-bold tracking-widest text-muted-foreground hover:text-foreground transition-colors border border-border/30 bg-surface/50 rounded px-2 py-0.5 hover:bg-accent"
+            >
+              <Settings2 className="h-3 w-3" />
+              {t("Recipe")}
+            </button>
           </div>
 
           {/* Main answer bubble */}
@@ -214,6 +227,14 @@ export function AssistantTurnCard(props: {
           )}
         </div>
       </div>
+      
+      {recipeOpen && (
+        <RecipeEditorSheet 
+          controller={controller} 
+          executionPlanSnapshot={props.report.executionPlan ?? undefined} 
+          onClose={() => setRecipeOpen(false)} 
+        />
+      )}
     </div>
   );
 }

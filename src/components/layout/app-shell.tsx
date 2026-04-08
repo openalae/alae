@@ -25,7 +25,6 @@ import {
 import { BottomStatusBar } from "@/features/runtime/components/BottomStatusBar";
 import { CanvasModeShell } from "@/features/canvas/components/CanvasModeShell";
 import { CompareModeShell } from "@/features/compare/components/CompareModeShell";
-import { RecipeEditorShell } from "@/features/recipe/components/RecipeEditorShell";
 import { selectLatestSynthesisReport, useAppStore } from "@/store";
 import { useSettingsStore } from "@/store/settings";
 import { useState } from "react";
@@ -175,8 +174,6 @@ function WorkspaceInspector(props: { controller: WorkspaceController }) {
             </div>
           </div>
         </section>
-
-        <RecipeEditorShell />
       </div>
     </div>
   );

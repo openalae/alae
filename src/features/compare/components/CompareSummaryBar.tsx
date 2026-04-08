@@ -1,6 +1,9 @@
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
 import type { SynthesisReport } from "@/schema";
+import { useWorkspaceController } from "@/features/workspace/controller";
+import { RecipeEditorSheet } from "@/features/recipe/components/RecipeEditorSheet";
 
 /** The crux: pull the most significant conflict question, or fall back to a neutral summary. */
 function getPrimaryQuestion(report: SynthesisReport): string {
@@ -19,6 +22,9 @@ function getPrimaryQuestion(report: SynthesisReport): string {
 
 export function CompareSummaryBar(props: { report: SynthesisReport }) {
   const { t } = useTranslation();
+  const controller = useWorkspaceController();
+  const [recipeOpen, setRecipeOpen] = useState(false);
+  
   const { report } = props;
   const conflictCount = report.conflicts.length;
   const consensusCount = report.consensus?.items.length ?? 0;
@@ -47,7 +53,7 @@ export function CompareSummaryBar(props: { report: SynthesisReport }) {
       </p>
 
       {/* Compact counts */}
-      <div className="flex items-center gap-3 shrink-0 text-[10px] font-mono text-muted-foreground">
+      <div className="flex items-center gap-3 shrink-0 text-[10px] font-mono text-muted-foreground mr-2">
         {consensusCount > 0 && (
           <span className="text-emerald-600 dark:text-emerald-400">
             {consensusCount} {t("agreed")}
@@ -59,6 +65,25 @@ export function CompareSummaryBar(props: { report: SynthesisReport }) {
           </span>
         )}
       </div>
+
+      {/* Recipe Editor Button */}
+      <div className="shrink-0 h-3 w-px bg-border/50 mr-1" />
+      <button
+        onClick={() => setRecipeOpen(true)}
+        className="shrink-0 flex items-center justify-center w-6 h-6 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border/30"
+        title={t("Configure Recipe")}
+      >
+        <Settings2 className="w-3.5 h-3.5" />
+      </button>
+
+      {recipeOpen && (
+        <RecipeEditorSheet 
+          controller={controller} 
+          executionPlanSnapshot={report.executionPlan ?? undefined} 
+          onClose={() => setRecipeOpen(false)} 
+          isCompareMode
+        />
+      )}
     </div>
   );
 }
