@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { selectLatestSynthesisReport, useAppStore } from "@/store";
 import { appStore } from "@/store/app-store";
 
-export function useTruthPanelState() {
+export function useRuntimeDrawerState() {
   const isTruthPanelOpen = useAppStore((state) => state.isTruthPanelOpen);
   const truthPanelSnapshot = useAppStore((state) => state.truthPanelSnapshot);
   const latestSynthesisReport = useAppStore(selectLatestSynthesisReport);
@@ -17,16 +17,16 @@ export function useTruthPanelState() {
   };
 }
 
-export function useTruthPanelAutoOpen() {
-  const { latestSynthesisReport, runtimeErrorMessage } = useTruthPanelState();
+export function useRuntimeDrawerAutoOpen() {
+  const { runtimeErrorMessage } = useRuntimeDrawerState();
 
   useEffect(() => {
-    if (runtimeErrorMessage || latestSynthesisReport?.status === "failed") {
+    if (runtimeErrorMessage) {
       appStore.getState().openTruthPanel();
     }
-  }, [latestSynthesisReport?.status, runtimeErrorMessage]);
+  }, [runtimeErrorMessage]);
 }
 
-export function toggleTruthPanel() {
+export function toggleRuntimeDrawer() {
   appStore.getState().toggleTruthPanel();
 }

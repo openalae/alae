@@ -9,15 +9,14 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-} from "@/components/ui/card";
+
 
 import {
   useWorkspaceController,
   type WorkspaceController,
 } from "@/features/workspace/controller";
-import { SynthesisReportSplitView } from "@/features/workspace/split-view-container";
+
+import { UserMessageBubble, AssistantCompactReply, AssistantTurnCard } from "@/features/chat/components/MessageBubbles";
 import { useSettingsStore } from "@/store/settings";
 import type { ConversationNode, ModelRun } from "@/schema";
 
@@ -78,26 +77,7 @@ function buildModeNotice(mode: "mock" | "real", t: (key: string) => string) {
   };
 }
 
-function buildNodeAnswerText(node: ConversationNode, t: (key: string, options?: Record<string, unknown>) => string) {
-  if (!node.synthesisReport) {
-    if (node.status === "failed") {
-      return t("An unknown error occurred during execution.");
-    }
 
-    return t("No content available.");
-  }
-
-  if (node.synthesisReport.resolution) {
-    return [
-      t(node.synthesisReport.resolution.chosenApproach),
-      t(node.synthesisReport.resolution.summary),
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-  }
-
-  return t(node.synthesisReport.summary, { topic: node.synthesisReport.prompt });
-}
 
 
 /* ─────  Sub Components  ───── */
@@ -261,61 +241,17 @@ function HistoricalNodeState(props: { mode: "mock" | "real"; node: ConversationN
   );
 }
 
-function HistoricalConversationTurn(props: {
-  node: ConversationNode;
-  isActive: boolean;
-  onSelect: () => void;
-}) {
-  const { t } = useTranslation();
 
-  return (
-    <article
-      className={`rounded-[1.25rem] border bg-card/75 shadow-sm transition-colors ${
-        props.isActive ? "border-primary/40 ring-2 ring-primary/15" : "border-border/40"
-      }`}
-    >
-      <button
-        type="button"
-        onClick={props.onSelect}
-        className="flex w-full items-start justify-between gap-4 border-b border-border/30 px-5 py-4 text-left"
-      >
-        <div className="min-w-0 space-y-2">
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-muted-foreground">
-            {t("Question")}
-          </div>
-          <div className="text-sm leading-6 text-foreground">{props.node.prompt}</div>
-        </div>
-        <span
-          className={`inline-flex shrink-0 rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${getRunStatusClasses(props.node.status)}`}
-        >
-          {formatNodeStatus(props.node.status, t)}
-        </span>
-      </button>
-
-      <div className="px-5 py-5">
-        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.24em] text-primary/80">
-          <Sparkles className="h-3.5 w-3.5" />
-          <span>{t("Merged answer")}</span>
-        </div>
-        <div className="mt-3 rounded-[1.2rem] border border-border/50 bg-background/85 px-5 py-5">
-          <div className="whitespace-pre-wrap text-[15px] leading-8 text-foreground">
-            {buildNodeAnswerText(props.node, t)}
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
 
 
 
 /* ─────  Main Component  ───── */
 
-type ProgressiveWorkspaceProps = {
+type ConversationTimelineProps = {
   controller?: WorkspaceController;
 };
 
-export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
+export function ConversationTimeline(props: ConversationTimelineProps) {
   const { t } = useTranslation();
   const controller = props.controller ?? useWorkspaceController();
   const { openSettingsModal } = useSettingsStore();
@@ -338,7 +274,6 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
     outlineNodes,
     selectNode,
     conversationSummaries,
-    resolveConflicts,
   } = controller;
 
   // Only show example prompts when there's no conversation history and no active content
@@ -372,90 +307,110 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
   }, [pendingScrollNodeId, selectedNode?.id, outlineNodes.length]);
 
   return (
-    <Card className="flex flex-col h-full w-full border-none shadow-none bg-transparent overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto pb-36 pt-4">
-        <div className="space-y-4 px-4 md:px-8">
-          {/* Version Switcher */}
-          <VersionSwitcher
-            siblings={siblingBranches}
-            selectedBranchId={selectedBranchId}
-            onSelectBranch={selectBranch}
-          />
+    <div className="w-full pb-8 pt-4">
+      <div className="space-y-4 px-4 md:px-8">
+        {/* Version Switcher */}
+        <VersionSwitcher
+          siblings={siblingBranches}
+          selectedBranchId={selectedBranchId}
+          onSelectBranch={selectBranch}
+        />
 
-          {/* Example Prompts — only when empty state */}
-          {showExamplePrompts && (
-            <div className="flex flex-wrap gap-2">
-              {examplePrompts.map((example) => (
-                <Button
-                  key={example.label}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isBusy}
-                  onClick={() => setPromptDraft(example.prompt)}
-                >
-                  {t(example.label)}
-                </Button>
-              ))}
-            </div>
-          )}
+        {/* Example Prompts — only when empty state */}
+        {showExamplePrompts && (
+          <div className="flex flex-wrap gap-2">
+            {examplePrompts.map((example) => (
+              <Button
+                key={example.label}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isBusy}
+                onClick={() => setPromptDraft(example.prompt)}
+              >
+                {t(example.label)}
+              </Button>
+            ))}
+          </div>
+        )}
 
-          {/* Error notices */}
-          {inputErrorMessage ? (
-            <div className="rounded-lg border px-4 py-3 text-sm badge-warning">{inputErrorMessage}</div>
-          ) : null}
-          {bootstrapErrorMessage ? (
-            <div className="rounded-lg border px-4 py-3 text-sm badge-error">{bootstrapErrorMessage}</div>
-          ) : null}
-          {runtimeErrorMessage ? (
-            <div className="rounded-lg border px-4 py-3 text-sm badge-error">{runtimeErrorMessage}</div>
-          ) : null}
+        {/* Error notices */}
+        {inputErrorMessage ? (
+          <div className="rounded-lg border px-4 py-3 text-sm badge-warning">{inputErrorMessage}</div>
+        ) : null}
+        {bootstrapErrorMessage ? (
+          <div className="rounded-lg border px-4 py-3 text-sm badge-error">{bootstrapErrorMessage}</div>
+        ) : null}
+        {runtimeErrorMessage ? (
+          <div className="rounded-lg border px-4 py-3 text-sm badge-error">{runtimeErrorMessage}</div>
+        ) : null}
 
-        </div>
+      </div>
 
-        {/* Main content area */}
-        <div className="mt-0">
-          {isBootstrapping ? (
-            <div className="px-4 md:px-8"><LoadingWorkspaceState /></div>
-          ) : outlineNodes.length > 0 ? (
-            <div className="space-y-6 px-4 md:px-8">
-              {outlineNodes.map((node) => (
+      {/* Main content area */}
+      <div className="mt-0">
+        {isBootstrapping ? (
+          <div className="px-4 md:px-8"><LoadingWorkspaceState /></div>
+        ) : outlineNodes.length > 0 ? (
+          <div className="space-y-6 px-4 md:px-8 pb-12">
+            {outlineNodes.map((node) => {
+              const isActive = node.id === selectedNode?.id;
+              
+              // Determine which assistant component to show
+              let AssistantContent = null;
+              if (node.synthesisReport) {
+                const candidateRunsCount = node.synthesisReport.modelRuns.filter(r => r.role !== "judge").length;
+                if (candidateRunsCount > 1 || node.synthesisReport.conflicts.length > 0) {
+                  AssistantContent = (
+                    <AssistantTurnCard
+                      report={node.synthesisReport}
+                      isRunning={node.status === "running"}
+                    />
+                  );
+                } else {
+                  AssistantContent = <AssistantCompactReply report={node.synthesisReport} isRunning={node.status === "running"} />;
+                }
+              } else if (isActive) {
+                AssistantContent = <HistoricalNodeState mode={displayMode} node={node} />;
+              } else if (node.status === "running") {
+                  AssistantContent = (
+                    <div className="flex items-center gap-2 text-muted-foreground animate-pulse p-4">
+                      <LoaderCircle className="w-4 h-4 animate-spin" />
+                      {t("Model is thinking...")}
+                    </div>
+                  );
+              }
+
+              return (
                 <div
                   key={node.id}
                   ref={(section) => {
                     nodeSectionRefs.current[node.id] = section;
                   }}
                   id={`workspace-node-${node.id}`}
-                  className="scroll-mt-24"
+                  className={`scroll-mt-24 transition-opacity group cursor-pointer ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`}
+                  onClick={() => {
+                    if (!isActive) handleSelectOutlineNode(node.id);
+                  }}
                 >
-                  {node.id === selectedNode?.id && node.synthesisReport ? (
-                    <SynthesisReportSplitView
-                      report={node.synthesisReport}
-                      onResolve={resolveConflicts}
-                      isBusy={isBusy}
-                      conversationOutlineNodes={outlineNodes}
-                      activeOutlineNodeId={selectedNode?.id ?? null}
-                      onSelectOutlineNode={handleSelectOutlineNode}
-                    />
-                  ) : node.id === selectedNode?.id ? (
-                    <HistoricalNodeState mode={displayMode} node={node} />
-                  ) : (
-                    <HistoricalConversationTurn
-                      node={node}
-                      isActive={node.id === selectedNode?.id}
-                      onSelect={() => handleSelectOutlineNode(node.id)}
-                    />
-                  )}
+                  <UserMessageBubble prompt={node.prompt} />
+                  
+                  <div className={`${!isActive ? "pointer-events-none" : ""}`}>
+                    {AssistantContent}
+                  </div>
                 </div>
-              ))}
-            </div>
-          ) : selectedNode ? (
-            <div className="px-4 md:px-8"><HistoricalNodeState mode={displayMode} node={selectedNode} /></div>
-          ) : (
-            <div className="px-4 md:px-8"><EmptyWorkspaceState mode={displayMode} onOpenSettings={() => openSettingsModal("providers")} /></div>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        ) : selectedNode ? (
+          <div className="px-4 md:px-8">
+            <UserMessageBubble prompt={selectedNode.prompt} />
+            <HistoricalNodeState mode={displayMode} node={selectedNode} />
+          </div>
+        ) : (
+          <div className="px-4 md:px-8"><EmptyWorkspaceState mode={displayMode} onOpenSettings={() => openSettingsModal("providers")} /></div>
+        )}
       </div>
-    </Card>
+    </div>
   );
 }

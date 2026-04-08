@@ -5,19 +5,18 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
-  Clock3,
   ShieldAlert,
   Waypoints,
 } from "lucide-react";
 
 import {
-  toggleTruthPanel,
-  useTruthPanelAutoOpen,
-  useTruthPanelState,
-} from "@/features/truth-panel/controller";
+  toggleRuntimeDrawer,
+  useRuntimeDrawerAutoOpen,
+  useRuntimeDrawerState,
+} from "@/features/runtime/controller";
 import type { ModelRun, TraceEvent, ValidationIssue } from "@/schema";
 
-type TruthPanelTab = "overview" | "runs" | "issues" | "logs";
+type BottomRuntimeDrawerTab = "runtime" | "logs" | "json" | "trace";
 
 function formatTimestamp(value: string | null) {
   if (!value) return "n/a";
@@ -76,7 +75,7 @@ function EmptySection(props: { message: string }) {
 
 function TruthPanelSummary() {
   const { t } = useTranslation();
-  const { truthPanelSnapshot } = useTruthPanelState();
+  const { truthPanelSnapshot } = useRuntimeDrawerState();
 
   if (!truthPanelSnapshot) {
     return <EmptySection message={t("Run an analysis to see model calls, errors, and validation details.")} />;
@@ -95,7 +94,7 @@ function TruthPanelSummary() {
 
 function TruthPanelRunList() {
   const { t } = useTranslation();
-  const { truthPanelSnapshot } = useTruthPanelState();
+  const { truthPanelSnapshot } = useRuntimeDrawerState();
 
   if (!truthPanelSnapshot) {
     return <EmptySection message={t("No model-call details are available yet.")} />;
@@ -139,7 +138,7 @@ function TruthPanelRunList() {
 
 function ValidationIssueList() {
   const { t } = useTranslation();
-  const { truthPanelSnapshot } = useTruthPanelState();
+  const { truthPanelSnapshot } = useRuntimeDrawerState();
 
   if (!truthPanelSnapshot || truthPanelSnapshot.validationIssues.length === 0) {
     return <EmptySection message={t("No validation issues were recorded for the latest result.")} />;
@@ -162,7 +161,7 @@ function ValidationIssueList() {
 
 function TraceEventList() {
   const { t } = useTranslation();
-  const { truthPanelSnapshot } = useTruthPanelState();
+  const { truthPanelSnapshot } = useRuntimeDrawerState();
 
   if (!truthPanelSnapshot || truthPanelSnapshot.events.length === 0) {
     return <EmptySection message={t("No activity was recorded for the latest result.")} />;
@@ -188,31 +187,56 @@ function TraceEventList() {
   );
 }
 
-function TruthPanelBody(props: { tab: TruthPanelTab }) {
-  if (props.tab === "overview") return <TruthPanelSummary />;
-  if (props.tab === "runs") return <TruthPanelRunList />;
-  if (props.tab === "issues") return <ValidationIssueList />;
+function RawJsonDump() {
+  const { truthPanelSnapshot, latestSynthesisReport } = useRuntimeDrawerState();
+  const data = JSON.stringify(
+    {
+      report: latestSynthesisReport,
+      snapshot: truthPanelSnapshot,
+    },
+    null,
+    2,
+  );
+
+  return (
+    <pre className="rounded-lg border border-border/50 bg-background/80 p-4 text-[10px] text-muted-foreground font-mono whitespace-pre overflow-x-auto">
+      {data}
+    </pre>
+  );
+}
+
+function TruthPanelBody(props: { tab: BottomRuntimeDrawerTab }) {
+  if (props.tab === "runtime") {
+    return (
+      <div className="space-y-6">
+        <TruthPanelSummary />
+        <TruthPanelRunList />
+      </div>
+    );
+  }
+  if (props.tab === "logs") return <ValidationIssueList />;
+  if (props.tab === "json") return <RawJsonDump />;
   return <TraceEventList />;
 }
 
-export function TruthPanel() {
-  useTruthPanelAutoOpen();
+export function BottomRuntimeDrawer() {
+  useRuntimeDrawerAutoOpen();
   const { t } = useTranslation();
   const {
     isTruthPanelOpen,
     truthPanelSnapshot,
     latestSynthesisReport,
     runtimeErrorMessage,
-  } = useTruthPanelState();
+  } = useRuntimeDrawerState();
 
   const hasValidationIssues = (truthPanelSnapshot?.validationIssues.length ?? 0) > 0;
-  const hasLogs = (truthPanelSnapshot?.events.length ?? 0) > 0;
-  const defaultTab = useMemo<TruthPanelTab>(() => {
-    if (runtimeErrorMessage || hasValidationIssues) return "issues";
-    if (hasLogs) return "logs";
-    return "runs";
-  }, [hasLogs, hasValidationIssues, runtimeErrorMessage]);
-  const [activeTab, setActiveTab] = useState<TruthPanelTab>(defaultTab);
+  const hasEvents = (truthPanelSnapshot?.events.length ?? 0) > 0;
+  const defaultTab = useMemo<BottomRuntimeDrawerTab>(() => {
+    if (runtimeErrorMessage || hasValidationIssues) return "logs";
+    if (hasEvents) return "trace";
+    return "runtime";
+  }, [hasEvents, hasValidationIssues, runtimeErrorMessage]);
+  const [activeTab, setActiveTab] = useState<BottomRuntimeDrawerTab>(defaultTab);
 
   const reportStatus = latestSynthesisReport?.status ?? "idle";
   const reportStatusLabel =
@@ -227,15 +251,15 @@ export function TruthPanel() {
   }
 
   const tabs: Array<{
-    id: TruthPanelTab;
+    id: BottomRuntimeDrawerTab;
     label: string;
     icon: typeof Waypoints;
     disabled?: boolean;
   }> = [
-    { id: "overview", label: t("Overview"), icon: Waypoints },
-    { id: "runs", label: t("Model calls"), icon: Clock3, disabled: !truthPanelSnapshot || truthPanelSnapshot.runs.length === 0 },
-    { id: "issues", label: t("Output issues"), icon: AlertTriangle, disabled: !truthPanelSnapshot || truthPanelSnapshot.validationIssues.length === 0 },
-    { id: "logs", label: t("Activity log"), icon: CheckCircle2, disabled: !truthPanelSnapshot || truthPanelSnapshot.events.length === 0 },
+    { id: "runtime", label: t("Runtime"), icon: Waypoints },
+    { id: "logs", label: t("Logs"), icon: AlertTriangle, disabled: !truthPanelSnapshot || truthPanelSnapshot.validationIssues.length === 0 },
+    { id: "json", label: t("Raw JSON"), icon: Activity },
+    { id: "trace", label: t("Trace"), icon: CheckCircle2, disabled: !truthPanelSnapshot || truthPanelSnapshot.events.length === 0 },
   ];
 
   return (
@@ -256,7 +280,7 @@ export function TruthPanel() {
 
           <button
             type="button"
-            onClick={toggleTruthPanel}
+            onClick={toggleRuntimeDrawer}
             className="inline-flex items-center gap-2 rounded-md border border-border/40 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             <ChevronDown className="h-3.5 w-3.5" />

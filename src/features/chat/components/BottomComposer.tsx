@@ -10,7 +10,7 @@ import {
 } from "@/features/settings";
 import type { WorkspaceController } from "@/features/workspace/controller";
 import { synthesisPresetDefinitions } from "@/features/consensus";
-import { useTruthPanelState } from "@/features/truth-panel/controller";
+import { useRuntimeDrawerState } from "@/features/runtime/controller";
 import { useSettingsStore } from "@/store/settings";
 import { getPresetCandidateCount } from "@/features/consensus/presets";
 
@@ -256,28 +256,28 @@ function PopoverPresetPicker({ controller, onClose }: { controller: WorkspaceCon
 }
 
 /* ─────────────────────────────────────────
- *  Run Status Indicator (compact, near input)
+ *  Run Strip (compact status, near input)
  * ───────────────────────────────────────── */
-function RunStatusIndicator() {
+function RunStrip() {
   const { t } = useTranslation();
-  const { truthPanelSnapshot } = useTruthPanelState();
+  const { truthPanelSnapshot } = useRuntimeDrawerState();
 
   if (!truthPanelSnapshot) return null;
 
   const { totalRuns, completedRuns, failedRuns } = truthPanelSnapshot.runSummary;
 
   return (
-    <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground shrink-0">
+    <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground shrink-0 bg-background/50 px-2 py-0.5 rounded-full border border-border/40">
       <Activity className="h-3 w-3 text-primary" />
       <span className="text-foreground/70">{completedRuns ?? 0}/{totalRuns ?? 0}</span>
       {failedRuns && failedRuns > 0 ? (
-        <span className="text-destructive">{failedRuns} {t("Failed").toLowerCase()}</span>
+        <span className="text-destructive font-bold">{failedRuns} {t("Failed").toLowerCase()}</span>
       ) : null}
     </div>
   );
 }
 
-export function GlobalInputShell({ controller }: { controller: WorkspaceController }) {
+export function BottomComposer({ controller }: { controller: WorkspaceController }) {
   const { t } = useTranslation();
   const [showPresets, setShowPresets] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -312,34 +312,33 @@ export function GlobalInputShell({ controller }: { controller: WorkspaceControll
   }, []);
 
   return (
-    <div className="absolute bottom-0 w-full left-0 right-0 z-50 px-4 pb-3 pointer-events-none bg-gradient-to-t from-surface via-surface/90 to-transparent pt-10">
-      <div className="w-full mx-auto md:max-w-[calc(100%-4rem)] bg-surface-container-low/95 backdrop-blur-xl border border-border/40 border-b-2 border-b-primary shadow-xl p-3 pointer-events-auto rounded-lg relative" ref={popoverRef}>
+    <div className="w-full shrink-0 z-40 bg-surface/80 backdrop-blur-sm px-4 py-2 border-t border-border/15">
+      <div className="w-full mx-auto md:max-w-[calc(100%-4rem)] bg-surface-container-low/80 border border-border/30 shadow-sm p-2 relative rounded-lg" ref={popoverRef}>
         
         {showPresets && <PopoverPresetPicker controller={controller} onClose={() => setShowPresets(false)} />}
 
         <div className="flex items-end gap-3 w-full">
           <div className="flex-1 flex flex-col gap-1 w-full relative">
-            <div className="flex items-center gap-2 pl-0.5">
-              <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
-                {pendingSubmissionMode === "fork" ? t("Fork Branch Next Steps") : t("Logic Input Shell")}
+            <div className="flex items-center gap-2 pl-0.5 mb-1">
+              <label className="text-[9px] font-mono text-muted-foreground/70 uppercase tracking-widest">
+                {pendingSubmissionMode === "fork" ? t("Fork Branch") : t("Message")}
               </label>
               <button 
                 onClick={() => setShowPresets(!showPresets)}
-                className="text-[10px] text-primary flex items-center gap-1 hover:underline cursor-pointer"
+                className="text-[10px] text-primary flex items-center gap-1 hover:underline cursor-pointer ml-1"
               >
                 <Settings2 className="h-3 w-3" />
                 {t(currentTemplateLabel)}
               </button>
-              {/* Run Status Indicator — compact, near the input */}
               <div className="ml-auto">
-                <RunStatusIndicator />
+                <RunStrip />
               </div>
             </div>
             <textarea
               aria-label="Question"
-              className="bg-transparent border-none w-full p-1 text-sm focus:ring-0 text-foreground placeholder:text-muted-foreground font-mono resize-none outline-none overflow-y-auto"
+              className="bg-transparent border-none w-full p-1.5 text-sm focus:ring-0 text-foreground placeholder:text-muted-foreground/60 font-mono resize-none outline-none overflow-y-auto rounded-md hover:bg-accent/10 focus:bg-accent/15 min-h-[38px] max-h-[120px] transition-colors"
               placeholder={t("Refine logic or branch out... Use Cmd/Ctrl+Enter to commit") as string}
-              rows={1}
+              rows={promptDraft.split("\n").length > 1 ? Math.min(promptDraft.split("\n").length, 6) : 1}
               value={promptDraft}
               onChange={(event) => setPromptDraft(event.target.value)}
               onKeyDown={handlePromptKeyDown}
@@ -347,34 +346,32 @@ export function GlobalInputShell({ controller }: { controller: WorkspaceControll
             ></textarea>
           </div>
 
-          <div className="flex gap-2 shrink-0 h-[36px]">
+          <div className="flex gap-2 shrink-0 h-[38px]">
             {isBootstrapping ? (
               <Button disabled className="h-full rounded-lg" aria-label="Restoring">
                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                <span className="text-xs font-semibold uppercase tracking-tight hidden sm:inline">{t("Restoring your history")}</span>
               </Button>
             ) : isRunning ? (
               <Button disabled className="h-full rounded-lg" aria-label="Running">
                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                <span className="text-xs font-semibold uppercase tracking-tight hidden sm:inline">{t("Running...")}</span>
               </Button>
             ) : pendingSubmissionMode === "fork" ? (
               <button
                 disabled={isBusy}
                 onClick={() => { void submitPrompt(); setShowPresets(false); }}
-                className="bg-surface-container-high text-foreground h-full px-4 flex items-center gap-2 hover:bg-accent transition-colors cursor-pointer border border-border/30 rounded-lg disabled:opacity-50"
+                className="bg-surface-container-high text-foreground h-full px-5 flex items-center gap-2 hover:bg-accent transition-colors cursor-pointer border border-border/30 rounded-lg disabled:opacity-50"
               >
-                <GitFork className="h-3.5 w-3.5 text-primary" />
-                <span className="text-xs font-semibold uppercase tracking-tight hidden sm:inline">{t("Branch Fork")}</span>
+                <GitFork className="h-4 w-4 text-primary" />
+                <span className="text-xs font-semibold uppercase tracking-tight hidden sm:inline">{t("Fork")}</span>
               </button>
              ) : (
               <button
                 disabled={isBusy}
                 onClick={() => { void submitPrompt(); setShowPresets(false); }}
-                className="bg-primary text-primary-foreground h-full px-4 flex items-center gap-2 hover:bg-primary/90 transition-colors cursor-pointer rounded-lg disabled:opacity-50"
+                className="bg-primary text-primary-foreground h-full px-5 flex items-center gap-2 hover:bg-primary/90 transition-colors cursor-pointer rounded-lg disabled:opacity-50"
               >
-                <Play className="h-3.5 w-3.5 fill-current" />
-                <span className="text-xs font-semibold uppercase tracking-tight hidden sm:inline">{t("Commit")}</span>
+                <Play className="h-4 w-4 fill-current" />
+                <span className="text-xs font-semibold uppercase tracking-tight hidden sm:inline">{t("Send")}</span>
               </button>
             )}
           </div>

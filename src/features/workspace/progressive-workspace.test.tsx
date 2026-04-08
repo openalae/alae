@@ -45,15 +45,17 @@ vi.mock("@/features/reasoning-tree", async () => {
   };
 });
 
-import { ProgressiveWorkspace, GlobalInputShell, useWorkspaceController } from "@/features/workspace";
+import { ConversationTimeline } from "@/features/chat/components/ConversationTimeline";
+import { BottomComposer } from "@/features/chat/components/BottomComposer";
+import { useWorkspaceController } from "@/features/workspace";
 import { useSettingsStore } from "@/store/settings";
 
 function TestWorkspace() {
   const controller = useWorkspaceController();
   return (
     <div>
-      <ProgressiveWorkspace controller={controller} />
-      <GlobalInputShell controller={controller} />
+      <ConversationTimeline controller={controller} />
+      <BottomComposer controller={controller} />
     </div>
   );
 }
@@ -205,6 +207,27 @@ const truthPanelSnapshot = {
   ],
 };
 
+const earlierReport = {
+  ...report,
+  id: "report-module-8",
+  prompt: "Plan module 8.",
+  summary: "Map the bootstrap flow before changing UI.",
+  conflicts: [],
+  resolution: {
+    ...report.resolution,
+    summary: "Map the bootstrap flow before changing UI.",
+    chosenApproach: "Document the current restore path before changing UI.",
+    resolvedConflictIds: [],
+    judgeModelRunId: "run-judge-0",
+    openRisks: [],
+  },
+  modelRuns: report.modelRuns.map((run) => ({
+    ...run,
+    id: `${run.id}-earlier`,
+  })),
+  createdAt: "2026-03-17T23:59:00.000Z",
+};
+
 function createDeferredPromise<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -311,6 +334,58 @@ function createEmptyConversation(options: {
   };
 }
 
+function createThreadConversationSnapshot(): LoadedConversation {
+  return {
+    conversation: {
+      id: "conversation-thread-1",
+      title: "Plan module 8.",
+      createdAt: earlierReport.createdAt,
+      updatedAt: report.createdAt,
+    },
+    branches: [
+      {
+        id: "branch-main-thread-1",
+        conversationId: "conversation-thread-1",
+        name: "main",
+        sourceNodeId: null,
+        rootNodeId: "node-thread-1",
+        headNodeId: "node-thread-2",
+        createdAt: earlierReport.createdAt,
+        updatedAt: report.createdAt,
+      },
+    ],
+    nodes: [
+      {
+        id: "node-thread-1",
+        conversationId: "conversation-thread-1",
+        branchId: "branch-main-thread-1",
+        parentNodeId: null,
+        title: "Plan module 8.",
+        prompt: earlierReport.prompt,
+        status: "completed",
+        synthesisReport: earlierReport,
+        truthPanelSnapshot: null,
+        createdAt: earlierReport.createdAt,
+        updatedAt: earlierReport.createdAt,
+      },
+      {
+        id: "node-thread-2",
+        conversationId: "conversation-thread-1",
+        branchId: "branch-main-thread-1",
+        parentNodeId: "node-thread-1",
+        title: "Build module 9.",
+        prompt: report.prompt,
+        status: "completed",
+        synthesisReport: report,
+        truthPanelSnapshot,
+        createdAt: report.createdAt,
+        updatedAt: report.createdAt,
+      },
+    ],
+    modelRuns: [...earlierReport.modelRuns, ...report.modelRuns],
+  };
+}
+
 describe("ProgressiveWorkspace", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -371,10 +446,10 @@ describe("ProgressiveWorkspace", () => {
 
     render(<TestWorkspace />);
 
-    // Report summary should be visible inside the accordion (default open)
+    // Resolution text should be visible in the synthesis compact reply
     expect(
       await screen.findByText(
-        /Persist the workspace output and recover the latest local conversation/i,
+        /Write the node into PGLite, reload the conversation/i,
       ),
     ).toBeInTheDocument();
 
@@ -385,6 +460,18 @@ describe("ProgressiveWorkspace", () => {
       expect(appStore.getState().latestSynthesisReport).toEqual(report);
       expect(appStore.getState().truthPanelSnapshot).toEqual(truthPanelSnapshot);
     });
+  });
+
+  it("renders the current branch as a multi-turn thread", async () => {
+    const restoredConversation = createThreadConversationSnapshot();
+    repositoryMock.loadLatestConversation.mockResolvedValue(restoredConversation);
+
+    render(<TestWorkspace />);
+
+    expect(await screen.findByText("Plan module 8.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Write the node into PGLite, reload the conversation/i),
+    ).toBeInTheDocument();
   });
 
   it("shows bootstrap loading, then persists the recovered node before updating the workspace", async () => {
@@ -428,10 +515,10 @@ describe("ProgressiveWorkspace", () => {
       truthPanelSnapshot,
     });
 
-    // Report summary is visible in the report header
+    // Resolution text is visible in the synthesis compact reply
     expect(
       await screen.findByText(
-        /Persist the workspace output and recover the latest local conversation/i,
+        /Write the node into PGLite, reload the conversation/i,
       ),
     ).toBeInTheDocument();
 
@@ -449,9 +536,6 @@ describe("ProgressiveWorkspace", () => {
       expect(appStore.getState().truthPanelSnapshot).toEqual(truthPanelSnapshot);
       expect(appStore.getState().currentNodeId).toBe("node-module-9");
     });
-
-    // Candidate output is visible in the split view panel
-    expect(screen.getByText("Strong run")).toBeInTheDocument();
   });
 
   it("persists a failed node when execution throws and keeps the previous report visible", async () => {
@@ -473,7 +557,7 @@ describe("ProgressiveWorkspace", () => {
     // Wait for report to render
     expect(
       await screen.findByText(
-        /Persist the workspace output and recover the latest local conversation/i,
+        /Write the node into PGLite, reload the conversation/i,
       ),
     ).toBeInTheDocument();
 
@@ -535,7 +619,7 @@ describe("ProgressiveWorkspace", () => {
 
     expect(
       await screen.findByText(
-        /Persist the workspace output and recover the latest local conversation/i,
+        /Write the node into PGLite, reload the conversation/i,
       ),
     ).toBeInTheDocument();
 

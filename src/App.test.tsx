@@ -243,9 +243,9 @@ describe("App", () => {
 
     render(<App />);
 
-    // Wait for report summary to appear (inside accordion, default open)
+    // Wait for report content to appear (merged answer from resolution)
     expect(
-      await screen.findByText(/The report rendered successfully/i),
+      await screen.findByText(/Keep diagnostics in the right rail/i),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /API Pending/i }));

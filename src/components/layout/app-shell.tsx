@@ -1,33 +1,41 @@
 import { useEffect } from "react";
 import {
-  ChevronDown,
-  ChevronUp,
-  Database,
   PanelLeft,
   PanelRight,
   Plus,
   Puzzle,
-  Radio,
   Search,
   Settings,
+  GitCompare,
+  Presentation,
+  MessageSquare,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { SettingsModal } from "@/features/settings";
 import { ReasoningTreeExplorer, type ReasoningTreeConversationSummary } from "@/features/reasoning-tree";
-import { toggleTruthPanel } from "@/features/truth-panel/controller";
-import { TruthPanel } from "@/features/truth-panel";
+
+import { BottomRuntimeDrawer } from "@/features/runtime/components/BottomRuntimeDrawer";
 import {
-  GlobalInputShell,
-  ProgressiveWorkspace,
+  CenterPane,
   useWorkspaceController,
   type WorkspaceController,
 } from "@/features/workspace";
+import { BottomStatusBar } from "@/features/runtime/components/BottomStatusBar";
+import { CanvasModeShell } from "@/features/canvas/components/CanvasModeShell";
+import { CompareModeShell } from "@/features/compare/components/CompareModeShell";
+import { RecipeEditorShell } from "@/features/recipe/components/RecipeEditorShell";
 import { selectLatestSynthesisReport, useAppStore } from "@/store";
 import { useSettingsStore } from "@/store/settings";
+import { useState } from "react";
 
-function TopNavBar() {
+export type CenterViewMode = "chat" | "compare" | "canvas";
+
+function TopNavBar(props: {
+  viewMode: CenterViewMode;
+  onViewChange: (mode: CenterViewMode) => void;
+}) {
   const { t } = useTranslation();
   const {
     toggleLeftPanel,
@@ -53,14 +61,35 @@ function TopNavBar() {
           {t("ALAE")}
         </div>
         <nav className="hidden items-center gap-1 md:flex">
+          <div className="flex bg-accent/30 p-1 rounded-md border border-border/30">
+            <button
+              onClick={() => props.onViewChange("chat")}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-sm transition-all ${props.viewMode === "chat" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              {t("Chat")}
+            </button>
+            <button
+              onClick={() => props.onViewChange("compare")}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-sm transition-all ${props.viewMode === "compare" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              {t("Compare")}
+            </button>
+            <button
+              onClick={() => props.onViewChange("canvas")}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-sm transition-all ${props.viewMode === "canvas" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Presentation className="w-3.5 h-3.5" />
+              {t("Canvas")}
+            </button>
+          </div>
           <a
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground hidden xl:flex items-center gap-1.5"
             href="#"
           >
-            <span className="flex items-center gap-1.5">
-              <Puzzle className="h-3.5 w-3.5" />
-              {t("Plugins")}
-            </span>
+            <Puzzle className="h-3.5 w-3.5" />
+            {t("Plugins")}
           </a>
         </nav>
       </div>
@@ -87,71 +116,6 @@ function TopNavBar() {
   );
 }
 
-function formatRunPhaseLabel(
-  phase: WorkspaceController["runPhase"],
-  t: (key: string) => string,
-) {
-  if (phase === "preflight") return t("Preflight");
-  if (phase === "candidate_running") return t("Candidates running");
-  if (phase === "conflicts_pending") return t("Conflicts pending");
-  if (phase === "judge_running") return t("Judge running");
-  if (phase === "completed") return t("Completed");
-  if (phase === "failed") return t("Failed");
-  return t("Idle");
-}
-
-function BottomStatusBar() {
-  const { t } = useTranslation();
-  const runPhase = useAppStore((state) => state.runPhase);
-  const isTruthPanelOpen = useAppStore((state) => state.isTruthPanelOpen);
-  const truthPanelSnapshot = useAppStore((state) => state.truthPanelSnapshot);
-  const modelCatalog = useAppStore((state) => state.modelCatalog);
-  const readyModelCount = Object.values(modelCatalog)
-    .flat()
-    .filter((model) => model.availability === "ready").length;
-  const traceCount = truthPanelSnapshot?.events.length ?? 0;
-  const runCount = truthPanelSnapshot?.runSummary.totalRuns ?? 0;
-
-  return (
-    <footer className="z-50 flex h-8 w-full shrink-0 items-center gap-4 border-t border-border/30 bg-surface-container-lowest px-4 font-mono text-[10px] uppercase tracking-widest">
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Database className="h-3 w-3" />
-          <span>{t("PGLite")}</span>
-        </div>
-
-        <button
-          type="button"
-          onClick={toggleTruthPanel}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-background/70 px-2 py-1 text-primary transition-colors hover:bg-accent"
-          aria-expanded={isTruthPanelOpen}
-        >
-          <Radio className="h-3 w-3" />
-          <span>{readyModelCount > 0 ? t("API Connected") : t("API Pending")}</span>
-          <span className="text-muted-foreground">{t("{{count}} models ready", { count: readyModelCount })}</span>
-          {isTruthPanelOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
-        </button>
-
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <PanelRight className="h-3 w-3" />
-          <span>{t("Run phase")}: {formatRunPhaseLabel(runPhase, t)}</span>
-        </div>
-
-        <button
-          type="button"
-          onClick={toggleTruthPanel}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-background/70 px-2 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <span>{t("Logs")}</span>
-          <span>{traceCount}</span>
-          <span className="text-border">/</span>
-          <span>{t("Runs")}</span>
-          <span>{runCount}</span>
-        </button>
-      </div>
-    </footer>
-  );
-}
 
 function WorkspaceInspector(props: { controller: WorkspaceController }) {
   const { t } = useTranslation();
@@ -193,7 +157,7 @@ function WorkspaceInspector(props: { controller: WorkspaceController }) {
               {t("Run phase")}
             </div>
             <div className="mt-1 text-sm font-medium text-foreground">
-              {formatRunPhaseLabel(props.controller.runPhase, t)}
+              {props.controller.runPhase}
             </div>
           </div>
           <div className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
@@ -207,10 +171,12 @@ function WorkspaceInspector(props: { controller: WorkspaceController }) {
               {t("Report stage")}
             </div>
             <div className="mt-1 text-sm font-medium text-foreground">
-              {latestSynthesisReport?.reportStage ?? formatRunPhaseLabel(props.controller.runPhase, t)}
+              {latestSynthesisReport?.reportStage ?? props.controller.runPhase}
             </div>
           </div>
         </section>
+
+        <RecipeEditorShell />
       </div>
     </div>
   );
@@ -219,6 +185,7 @@ function WorkspaceInspector(props: { controller: WorkspaceController }) {
 export function AppShell() {
   const { t } = useTranslation();
   const { isRightPanelOpen, isLeftPanelOpen, setLeftPanelOpen, setRightPanelOpen } = useSettingsStore();
+  const [centerView, setCenterView] = useState<CenterViewMode>("chat");
 
   useEffect(() => {
     const handleResize = () => {
@@ -241,7 +208,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
-      <TopNavBar />
+      <TopNavBar viewMode={centerView} onViewChange={setCenterView} />
       <SettingsModal />
 
       <div className="flex flex-1 overflow-hidden">
@@ -289,9 +256,14 @@ export function AppShell() {
 
         <main className="relative flex flex-1 flex-col overflow-hidden bg-surface">
           <div className="mx-auto flex h-full w-full flex-col">
-            <ProgressiveWorkspace controller={controller} />
+            {centerView === "compare" ? (
+              <CompareModeShell controller={controller} />
+            ) : centerView === "canvas" ? (
+              <CanvasModeShell />
+            ) : (
+              <CenterPane controller={controller} />
+            )}
           </div>
-          <GlobalInputShell controller={controller} />
         </main>
 
         <aside
@@ -307,7 +279,7 @@ export function AppShell() {
         </aside>
       </div>
 
-      {latestSynthesisReport || truthPanelSnapshot || runtimeErrorMessage ? <TruthPanel /> : null}
+      {latestSynthesisReport || truthPanelSnapshot || runtimeErrorMessage ? <BottomRuntimeDrawer /> : null}
       <BottomStatusBar />
     </div>
   );
