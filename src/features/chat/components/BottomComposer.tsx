@@ -1,47 +1,51 @@
-import { type KeyboardEvent, useState, useRef, useEffect } from "react";
+import { type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, BrainCircuit, GitFork, LoaderCircle, Play, Settings2, Zap } from "lucide-react";
+import { Activity, GitFork, LoaderCircle, Play, Settings2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  buildCatalogItemId,
-  getProviderDefinition,
-  type ModelCatalogItem,
-} from "@/features/settings";
 import type { WorkspaceController } from "@/features/workspace/controller";
-import { synthesisPresetDefinitions } from "@/features/consensus";
 import { useRuntimeDrawerState } from "@/features/runtime/controller";
-import { useSettingsStore } from "@/store/settings";
-import { getPresetCandidateCount } from "@/features/consensus/presets";
+import type { SynthesisPresetId } from "@/features/consensus";
+
+/* ─────────────────────────────────────────
+ *  Compact Route Selector
+ *
+ *  Maps user-friendly labels to the underlying SynthesisPresetId:
+ *   Fast       → "single"             (1 model)
+ *   Balanced   → "freeDefault"         (2 free-tier models)
+ *   Precise    → "dual"               (2 same-vendor models)
+ *   Deep       → "crossVendorDefault" (cross-vendor multi-model)
+ *
+ *  When controller.selectedPresetId is null the plan is custom.
+ * ───────────────────────────────────────── */
+
+const presetOptions: { id: SynthesisPresetId; label: string }[] = [
+  { id: "single", label: "Fast" },
+  { id: "freeDefault", label: "Balanced" },
+  { id: "dual", label: "Precise" },
+  { id: "crossVendorDefault", label: "Deep" },
+];
 
 function CompactRouteSelector({ controller }: { controller: WorkspaceController }) {
   const { t } = useTranslation();
-  
-  // Custom presets mapped to the underlying options
-  const presetOptions = [
-    { id: "single", label: "Fast" },
-    { id: "dual", label: "Balanced" },
-    { id: "crossVendorDefault", label: "Deep" },
-    { id: "custom", label: "Custom" },
-  ];
 
-  const value = controller.selectedPresetId ?? "custom";
-  const presetDefinition = controller.selectedPresetDefinition;
-  
+  const selectedId = controller.selectedPresetId;
+  const isCustom = selectedId === null;
   const candidateCount = controller.selectedExecutionPlan.candidateSlots.length;
-  const toolsStatus = "tools on"; // Mocked tools status for now
 
-  // Add the compact status label next to it: e.g. "Balanced · 2 models · tools on"
-  const activeLabel = presetOptions.find(p => p.id === value)?.label ?? "Custom";
+  const activeLabel = isCustom
+    ? "Custom"
+    : presetOptions.find((p) => p.id === selectedId)?.label ?? "Custom";
 
   return (
     <div className="flex items-center gap-2">
       <div className="relative flex items-center">
         <select
-          value={value}
+          value={isCustom ? "__custom__" : selectedId}
           onChange={(e) => {
-            if (e.target.value !== "custom") {
-              controller.setSelectedPresetId(e.target.value as any);
+            const value = e.target.value;
+            if (value !== "__custom__") {
+              controller.setSelectedPresetId(value as SynthesisPresetId);
             }
           }}
           className="h-6 appearance-none rounded border border-border/50 bg-card/80 pl-2 pr-6 text-[10px] font-medium text-foreground outline-none transition-colors hover:border-border focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
@@ -50,17 +54,14 @@ function CompactRouteSelector({ controller }: { controller: WorkspaceController 
           {presetOptions.map((opt) => (
             <option key={opt.id} value={opt.id}>{t(opt.label)}</option>
           ))}
+          {isCustom && <option value="__custom__">{t("Custom")}</option>}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-muted-foreground">
           <Settings2 className="h-3 w-3" />
         </div>
       </div>
       <span className="text-[10px] font-mono text-muted-foreground/60 tracking-tight">
-        {t("{{label}} · {{count}} models · {{tools}}", { 
-          label: t(activeLabel),
-          count: candidateCount,
-          tools: t(toolsStatus)
-        })}
+        {t(activeLabel)} · {candidateCount} {candidateCount === 1 ? t("model") : t("models")}
       </span>
     </div>
   );
@@ -90,7 +91,7 @@ function RunStrip() {
 
 export function BottomComposer({ controller }: { controller: WorkspaceController }) {
   const { t } = useTranslation();
-  
+
   const {
     promptDraft,
     setPromptDraft,
@@ -111,16 +112,16 @@ export function BottomComposer({ controller }: { controller: WorkspaceController
   return (
     <div className="w-full shrink-0 z-40 bg-surface/80 backdrop-blur-sm px-4 py-2 border-t border-border/15">
       <div className="w-full mx-auto md:max-w-[calc(100%-4rem)] bg-surface-container-low/80 border border-border/30 shadow-sm p-2 relative rounded-lg">
-        
+
         <div className="flex items-end gap-3 w-full">
           <div className="flex-1 flex flex-col gap-1 w-full relative">
             <div className="flex items-center gap-2 pl-0.5 mb-1">
               <label className="text-[9px] font-mono text-muted-foreground/70 uppercase tracking-widest">
                 {pendingSubmissionMode === "fork" ? t("Fork Branch") : t("Message")}
               </label>
-              
+
               <CompactRouteSelector controller={controller} />
-              
+
               <div className="ml-auto">
                 <RunStrip />
               </div>

@@ -365,6 +365,7 @@ export function ConversationTimeline(props: ConversationTimelineProps) {
                     <AssistantTurnCard
                       report={node.synthesisReport}
                       isRunning={node.status === "running"}
+                      controller={controller}
                     />
                   );
                 } else {

@@ -61,7 +61,7 @@ export function CompareModeShell({ controller }: { controller: WorkspaceControll
       </div>
 
       {/* Compact synthesis summary — NOT a competing main card */}
-      {report && <CompareSummaryBar report={report} />}
+      {report && <CompareSummaryBar report={report} controller={controller} />}
 
       {/* Model switcher chips — only when 3+ candidates */}
       <CompareModelTabs

@@ -1017,6 +1017,12 @@ export function useWorkspaceController() {
     }
   };
 
+  /** Accept a complete ExecutionPlan from an external source (e.g. RecipeEditorSheet). */
+  const applyExecutionPlan = (plan: ExecutionPlan) => {
+    setSelectedPresetId(null);
+    setSelectedExecutionPlan(plan);
+  };
+
   return {
     promptDraft,
     setPromptDraft: updatePromptDraft,
@@ -1045,6 +1051,7 @@ export function useWorkspaceController() {
     setCandidateCount,
     setCandidateModelSelection,
     setJudgeModelSelection,
+    applyExecutionPlan,
     conversationSummaries,
     loadedConversation,
     selectedConversation,

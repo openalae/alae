@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import type { SynthesisReport } from "@/schema";
-import { useWorkspaceController } from "@/features/workspace/controller";
+import type { WorkspaceController } from "@/features/workspace/controller";
 import { RecipeEditorSheet } from "@/features/recipe/components/RecipeEditorSheet";
 
 /** The crux: pull the most significant conflict question, or fall back to a neutral summary. */
@@ -20,9 +20,9 @@ function getPrimaryQuestion(report: SynthesisReport): string {
   return report.summary.replace(/\{\{\s*topic\s*\}\}/g, report.prompt);
 }
 
-export function CompareSummaryBar(props: { report: SynthesisReport }) {
+export function CompareSummaryBar(props: { report: SynthesisReport; controller: WorkspaceController }) {
   const { t } = useTranslation();
-  const controller = useWorkspaceController();
+  const { controller } = props;
   const [recipeOpen, setRecipeOpen] = useState(false);
   
   const { report } = props;

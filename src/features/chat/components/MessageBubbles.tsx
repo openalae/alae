@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import type { SynthesisReport } from "@/schema";
-import { useWorkspaceController } from "@/features/workspace/controller";
+import type { WorkspaceController } from "@/features/workspace/controller";
 import { RecipeEditorSheet } from "@/features/recipe/components/RecipeEditorSheet";
 
 function buildMergedText(report: SynthesisReport, t: (key: string, opts?: Record<string, unknown>) => string) {
@@ -68,9 +68,9 @@ export function AssistantCompactReply(props: { report: SynthesisReport; isBusy?:
 export function AssistantTurnCard(props: {
   report: SynthesisReport;
   isRunning?: boolean;
+  controller: WorkspaceController;
 }) {
   const { t } = useTranslation();
-  const controller = useWorkspaceController();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [recipeOpen, setRecipeOpen] = useState(false);
   const text = buildMergedText(props.report, t);
@@ -230,7 +230,7 @@ export function AssistantTurnCard(props: {
       
       {recipeOpen && (
         <RecipeEditorSheet 
-          controller={controller} 
+          controller={props.controller} 
           executionPlanSnapshot={props.report.executionPlan ?? undefined} 
           onClose={() => setRecipeOpen(false)} 
         />
