@@ -579,6 +579,15 @@ export function useWorkspaceController() {
     (model) => model.supportsJudge,
   );
 
+  // ── Sync: Re-resolve template plan if catalog updates ──
+  // If we are currently using a template preset (not a custom plan)
+  // and the catalog changes (e.g. discovery finishes), we re-resolve the plan.
+  useEffect(() => {
+    if (selectedPresetId && !storedExecutionPlan) {
+      setSelectedExecutionPlan(buildTemplateExecutionPlan(selectedPresetId, modelCatalog, synthesisMode));
+    }
+  }, [modelCatalog, selectedPresetId, synthesisMode, storedExecutionPlan]);
+
   const applyPresetTemplate = (presetId: SynthesisPresetId) => {
     setSelectedPresetId(presetId);
     setSelectedExecutionPlan(buildTemplateExecutionPlan(presetId, modelCatalog, synthesisMode));
