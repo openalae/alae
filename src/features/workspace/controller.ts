@@ -390,8 +390,21 @@ function buildTemplateExecutionPlan(
   modelCatalog: Record<SupportedProviderId, ModelCatalogItem[]>,
   synthesisMode: SynthesisToggle,
 ) {
-  const selection = resolveModelSelectionFromPreset(presetId, modelCatalog);
+  if (presetId.startsWith("custom_")) {
+    const customPresets = useSettingsStore.getState().customPresets;
+    const customPresetDef = customPresets.find((p) => p.id === presetId);
+    if (customPresetDef) {
+      const selection = resolveModelSelectionFromPreset(customPresetDef.preset, modelCatalog);
+      return buildExecutionPlanFromModelSelection({
+        modelCatalog,
+        selection,
+        synthesisMode,
+        label: customPresetDef.label,
+      });
+    }
+  }
 
+  const selection = resolveModelSelectionFromPreset(presetId, modelCatalog);
   return buildExecutionPlanFromModelSelection({
     modelCatalog,
     selection,

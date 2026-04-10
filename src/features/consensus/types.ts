@@ -20,7 +20,7 @@ import type {
 export const synthesisPresetIds = ["single", "dual", "crossVendorDefault", "freeDefault"] as const;
 export const synthesisSlotIds = ["strong", "fast-1", "fast-2", "synthesis"] as const;
 
-export type SynthesisPresetId = (typeof synthesisPresetIds)[number];
+export type SynthesisPresetId = (typeof synthesisPresetIds)[number] | (string & {});
 export type SynthesisSlotId = (typeof synthesisSlotIds)[number];
 export type SynthesisRunMode = "mock" | "real";
 export type SynthesisOutputType = "candidate" | "synthesis";

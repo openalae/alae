@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { WorkspaceController } from "@/features/workspace/controller";
 import { useRuntimeDrawerState } from "@/features/runtime/controller";
 import type { SynthesisPresetId } from "@/features/consensus";
+import { useSettingsStore } from "@/store/settings";
 
 /* ─────────────────────────────────────────
  *  Compact Route Selector
@@ -28,6 +29,7 @@ const presetOptions: { id: SynthesisPresetId; label: string }[] = [
 
 function CompactRouteSelector({ controller }: { controller: WorkspaceController }) {
   const { t } = useTranslation();
+  const customPresets = useSettingsStore((s) => s.customPresets);
 
   const selectedId = controller.selectedPresetId;
   const isCustom = selectedId === null;
@@ -36,7 +38,7 @@ function CompactRouteSelector({ controller }: { controller: WorkspaceController 
 
   const activeLabel = isCustom
     ? "Custom"
-    : presetOptions.find((p) => p.id === selectedId)?.label ?? "Custom";
+    : presetOptions.find((p) => p.id === selectedId)?.label ?? customPresets.find((p) => p.id === selectedId)?.label ?? "Custom";
 
   return (
     <div className="group relative flex items-center gap-2 cursor-default">
@@ -52,9 +54,18 @@ function CompactRouteSelector({ controller }: { controller: WorkspaceController 
           className="h-6 appearance-none rounded-md border border-border/40 bg-surface pl-2 pr-6 text-[10px] font-medium text-foreground outline-none transition-all hover:border-primary/50 hover:bg-surface-container-high focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           disabled={controller.isBusy}
         >
-          {presetOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>{t(opt.label)}</option>
-          ))}
+          <optgroup label={t("Presets")}>
+            {presetOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>{t(opt.label)}</option>
+            ))}
+          </optgroup>
+          {customPresets.length > 0 && (
+            <optgroup label={t("Custom")}>
+              {customPresets.map((opt) => (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
+              ))}
+            </optgroup>
+          )}
           {isCustom && <option value="__custom__">{t("Custom")}</option>}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-muted-foreground">

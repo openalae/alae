@@ -290,10 +290,10 @@ export function getSynthesisPreset(
 
 
 export function resolveModelSelectionFromPreset(
-  presetId: SynthesisPresetId,
+  presetOrId: SynthesisPresetId | SynthesisPreset,
   modelCatalog: ModelCatalogRecord,
 ): ModelSelectionState {
-  const preset = getSynthesisPreset(presetId);
+  const preset = typeof presetOrId === "string" ? getSynthesisPreset(presetOrId) : presetOrId;
   const selectedCandidateIds: string[] = [];
   const usedCandidateIds = new Set<string>();
   const usedProviders = new Set<SupportedProviderId>();

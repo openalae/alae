@@ -3,7 +3,8 @@ import { BrainCircuit, X, Settings2, Zap, Save, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { WorkspaceController } from "@/features/workspace/controller";
-import type { ExecutionPlan, SynthesisModelSlot, SynthesisToggle } from "@/features/consensus";
+import type { ExecutionPlan, SynthesisModelSlot, SynthesisToggle, SynthesisPreset, PresetSlotTemplate } from "@/features/consensus";
+import { useSettingsStore } from "@/store/settings";
 import {
   buildCatalogItemId,
   getProviderDefinition,
@@ -153,6 +154,9 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
     () => seedPlan.synthesisMode ?? "auto",
   );
 
+  const [isNamingPreset, setIsNamingPreset] = useState(false);
+  const [presetNameInput, setPresetNameInput] = useState("");
+
   const candidateCount = localCandidateSlots.length as 1 | 2 | 3;
 
   // Synthesis model options
@@ -163,6 +167,72 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
       ? controller.availableSynthesisModels
       : [currentSynthesisOption, ...controller.availableSynthesisModels];
   }, [currentSynthesisOption, controller.availableSynthesisModels]);
+
+  const isCustomPresetActive = Boolean(controller.selectedPresetId?.startsWith("custom_"));
+
+  const buildPresetFromState = (): SynthesisPreset => {
+    return {
+      id: "temp",
+      slots: [
+        ...localCandidateSlots.map((s, i) => ({
+          id: candidateSlotIds[i],
+          role: s.role,
+          outputType: "candidate",
+          provider: s.provider,
+          modelId: s.modelId,
+        } as PresetSlotTemplate)),
+        ...(localSynthesisSlot ? [{
+          id: "synthesis",
+          role: "synthesis",
+          outputType: "synthesis",
+          provider: localSynthesisSlot.provider,
+          modelId: localSynthesisSlot.modelId,
+        } as PresetSlotTemplate] : [])
+      ]
+    };
+  };
+
+  const handleSaveAsNewStart = () => {
+    setIsNamingPreset(true);
+    setPresetNameInput(t("Custom Recipe"));
+  };
+
+  const handleSaveAsNewConfirm = () => {
+    const name = presetNameInput.trim();
+    if (!name) return;
+    
+    const preset = buildPresetFromState();
+    useSettingsStore.getState().saveCustomPreset(name, preset);
+    
+    const newPresets = useSettingsStore.getState().customPresets;
+    const addedPreset = newPresets[newPresets.length - 1];
+    
+    const plan = buildCustomPlan({
+      candidateSlots: localCandidateSlots,
+      synthesisSlot: localSynthesisSlot,
+      synthesisMode: localSynthesisMode,
+    });
+    
+    controller.setSelectedPresetId(addedPreset.id);
+    controller.applyExecutionPlan(plan);
+    onClose();
+  };
+
+  const handleUpdateCurrent = () => {
+    if (!controller.selectedPresetId) return;
+    
+    const preset = buildPresetFromState();
+    useSettingsStore.getState().updateCustomPreset(controller.selectedPresetId, preset);
+    
+    const plan = buildCustomPlan({
+      candidateSlots: localCandidateSlots,
+      synthesisSlot: localSynthesisSlot,
+      synthesisMode: localSynthesisMode,
+    });
+    
+    controller.applyExecutionPlan(plan);
+    onClose();
+  };
 
   // ── Local mutation helpers ──
 
@@ -385,14 +455,54 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
       </div>
 
       {/* Footer actions */}
-      <div className="shrink-0 border-t border-border/30 bg-surface/50 p-4 flex items-center gap-2">
-        <Button onClick={onClose} variant="outline" size="sm" className="flex-1 h-9 border-border/40">
-          {t("Cancel")}
-        </Button>
-        <Button onClick={handleApply} size="sm" className="flex-1 h-9 gap-2" disabled={!isDirty}>
-          <Save className="h-3.5 w-3.5" />
-          {t("Apply to Next Turn")}
-        </Button>
+      <div className="shrink-0 border-t border-border/30 bg-surface/50 p-4">
+        {isNamingPreset ? (
+          <div className="flex items-center gap-2 w-full animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <input
+              type="text"
+              autoFocus
+              value={presetNameInput}
+              onChange={(e) => setPresetNameInput(e.target.value)}
+              className="flex-1 h-9 rounded-md border border-primary/50 bg-background px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary/50"
+              placeholder={t("Preset Name...")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveAsNewConfirm();
+                if (e.key === "Escape") setIsNamingPreset(false);
+              }}
+            />
+            <Button onClick={() => setIsNamingPreset(false)} variant="outline" size="sm" className="h-9 px-3">
+              {t("Cancel")}
+            </Button>
+            <Button onClick={handleSaveAsNewConfirm} size="sm" className="h-9 px-4 disabled:opacity-50" disabled={!presetNameInput.trim()}>
+              {t("Save")}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex gap-2 truncate">
+              <Button onClick={handleSaveAsNewStart} variant="outline" size="sm" className="h-9 gap-1.5 border-border/40 text-xs whitespace-nowrap">
+                <Save className="h-3.5 w-3.5" />
+                {t("Save as New")}
+              </Button>
+              {!executionPlanSnapshot && isCustomPresetActive && (
+            <Button onClick={handleUpdateCurrent} variant="outline" size="sm" className="h-9 gap-1.5 border-primary/50 text-xs text-primary hover:text-primary whitespace-nowrap">
+              <Save className="h-3.5 w-3.5" />
+              {t("Update Preset")}
+            </Button>
+          )}
+        </div>
+
+        <div className="flex gap-2 shrink-0">
+            <Button onClick={onClose} variant="ghost" size="sm" className="h-9 px-3">
+              {t("Cancel")}
+            </Button>
+            <Button onClick={handleApply} size="sm" className="h-9 gap-2" disabled={!isDirty}>
+              <Zap className="h-3.5 w-3.5" />
+              {t("Apply to Next Turn")}
+            </Button>
+          </div>
+        </div>
+        )}
       </div>
     </div>
   );
