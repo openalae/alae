@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import type { JudgeMode, SynthesisPresetId } from "@/features/consensus/types";
+import type { SynthesisToggle, SynthesisPresetId } from "@/features/consensus/types";
 
 export type Theme = "light" | "dark";
 export type Locale = "en" | "zh";
@@ -15,7 +15,7 @@ interface SettingsState {
   isLeftPanelOpen: boolean;
   isSettingsModalOpen: boolean;
   developerMode: boolean;
-  judgeMode: JudgeMode;
+  synthesisMode: SynthesisToggle;
   defaultPresetId: SynthesisPresetId;
   setTheme: (theme: Theme) => void;
   setLocale: (locale: Locale) => void;
@@ -27,7 +27,7 @@ interface SettingsState {
   openSettingsModal: (tab?: SettingsTab) => void;
   closeSettingsModal: () => void;
   setDeveloperMode: (enabled: boolean) => void;
-  setJudgeMode: (mode: JudgeMode) => void;
+  setSynthesisMode: (mode: SynthesisToggle) => void;
   setDefaultPresetId: (presetId: SynthesisPresetId) => void;
 }
 
@@ -41,7 +41,7 @@ export const useSettingsStore = create<SettingsState>()(
       isLeftPanelOpen: false,
       isSettingsModalOpen: false,
       developerMode: false,
-      judgeMode: "auto",
+      synthesisMode: "auto",
       defaultPresetId: "freeDefault",
       setTheme: (theme) => set({ theme }),
       setLocale: (locale) => set({ locale }),
@@ -56,7 +56,7 @@ export const useSettingsStore = create<SettingsState>()(
       })),
       closeSettingsModal: () => set({ isSettingsModalOpen: false }),
       setDeveloperMode: (enabled) => set({ developerMode: enabled }),
-      setJudgeMode: (mode) => set({ judgeMode: mode }),
+      setSynthesisMode: (mode) => set({ synthesisMode: mode }),
       setDefaultPresetId: (presetId) => set({ defaultPresetId: presetId }),
     }),
     {
@@ -67,7 +67,7 @@ export const useSettingsStore = create<SettingsState>()(
         isRightPanelOpen: state.isRightPanelOpen,
         isLeftPanelOpen: state.isLeftPanelOpen,
         developerMode: state.developerMode,
-        judgeMode: state.judgeMode,
+        synthesisMode: state.synthesisMode,
         defaultPresetId: state.defaultPresetId,
       }),
     }

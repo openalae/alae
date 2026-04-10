@@ -34,26 +34,27 @@ export function buildCandidateSystemPrompt(slot: SynthesisModelSlot, language?: 
 export function buildCandidateUserPrompt(prompt: string) {
   return [
     "Analyze the following user prompt for a multi-model synthesis workflow.",
-    "Focus on facts, approaches, risks, assumptions, and disagreements that a judge model should review.",
+    "Focus on facts, approaches, risks, assumptions, and disagreements that the synthesis step should review.",
     "",
     `Prompt: ${prompt}`,
   ].join("\n");
 }
 
-export function buildJudgeSystemPrompt(language?: string) {
+export function buildSynthesisSystemPrompt(language?: string) {
   const langInstruction = language === "zh"
-    ? "IMPORTANT: You must provide all textual content (summaries, rationales, chosenApproach, etc.) in Simplified Chinese (中文)."
-    : "IMPORTANT: You must provide all textual content (summaries, rationales, chosenApproach, etc.) in English.";
+    ? "IMPORTANT: You must provide all textual content (summaries, rationales, chosenApproach, highlights, etc.) in Simplified Chinese (中文)."
+    : "IMPORTANT: You must provide all textual content (summaries, rationales, chosenApproach, highlights, etc.) in English.";
 
   return [
-    "You are the synthesis judge for Alae.",
-    "Review the candidate outputs and resolve the conflicts using only the provided conflict IDs.",
-    "Return a structured resolution only.",
+    "You are the synthesis summarizer for Alae.",
+    "Review the candidate model outputs below.",
+    "Summarize the consensus, highlight key insights, note areas of disagreement, and propose a recommended approach.",
+    "Return a structured synthesis only.",
     langInstruction,
   ].join(" ");
 }
 
-export function buildJudgeUserPrompt(input: {
+export function buildSynthesisUserPrompt(input: {
   prompt: string;
   candidateRuns: CompletedCandidateRun[];
   consensusItems: ConsensusItem[];
@@ -67,8 +68,8 @@ export function buildJudgeUserPrompt(input: {
   };
 
   return [
-    "Resolve the synthesis using the candidate outputs below.",
-    "Use only conflict IDs that appear in the conflicts array when filling resolvedConflictIds.",
+    "Synthesize the candidate outputs below into a unified analysis.",
+    "Highlight areas of agreement, note key differences, and recommend a path forward.",
     "",
     JSON.stringify(payload, null, 2),
   ].join("\n");

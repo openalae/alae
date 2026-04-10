@@ -6,8 +6,8 @@ import type {
   CandidateModelOutput,
   ConflictPoint,
   ConsensusItem,
-  JudgeModelOutput,
-  JudgeStatus,
+  SynthesisModelOutput,
+  SynthesisStatus,
   ModelRun,
   ReportStage,
   Resolution,
@@ -18,19 +18,19 @@ import type {
 } from "@/schema";
 
 export const synthesisPresetIds = ["single", "dual", "crossVendorDefault", "freeDefault"] as const;
-export const synthesisSlotIds = ["strong", "fast-1", "fast-2", "judge"] as const;
+export const synthesisSlotIds = ["strong", "fast-1", "fast-2", "synthesis"] as const;
 
 export type SynthesisPresetId = (typeof synthesisPresetIds)[number];
 export type SynthesisSlotId = (typeof synthesisSlotIds)[number];
-export type SynthesisMode = "mock" | "real";
-export type SynthesisOutputType = "candidate" | "judge";
-export type JudgeMode = "auto" | "manual";
+export type SynthesisRunMode = "mock" | "real";
+export type SynthesisOutputType = "candidate" | "synthesis";
+export type SynthesisToggle = "auto" | "manual";
 
 export type SynthesisModelSlot = {
   id: SynthesisSlotId;
   provider: SupportedProviderId;
   modelId: string;
-  role: "strong" | "fast" | "judge";
+  role: "strong" | "fast" | "synthesis";
   outputType: SynthesisOutputType;
 };
 
@@ -47,32 +47,47 @@ export type ExecutionPlanSource =
 export type ExecutionPlan = {
   version: 1;
   candidateSlots: readonly SynthesisModelSlot[];
-  judgeSlot: SynthesisModelSlot | null;
-  conflictMode: JudgeMode;
+  synthesisSlot: SynthesisModelSlot | null;
+  synthesisMode: SynthesisToggle;
   source: ExecutionPlanSource;
+};
+
+export type PresetSlotTemplate = {
+  id: SynthesisSlotId;
+  role: "strong" | "fast" | "synthesis";
+  outputType: SynthesisOutputType;
+  
+  // Specific model targeting
+  provider?: SupportedProviderId;
+  modelId?: string;
+
+  // Dynamic tag routing
+  requireTags?: readonly string[];
+  excludeTags?: readonly string[];
+  avoidUsedProviders?: boolean;
 };
 
 export type SynthesisPreset = {
   id: SynthesisPresetId;
-  slots: readonly SynthesisModelSlot[];
+  slots: readonly PresetSlotTemplate[];
 };
 
 export type RunSynthesisInput = {
   prompt: string;
-  mode: SynthesisMode;
+  mode: SynthesisRunMode;
+  executionPlan: ExecutionPlan;
   presetId?: SynthesisPresetId;
-  executionPlan?: ExecutionPlan;
-  judgeMode?: JudgeMode;
+  synthesisMode?: SynthesisToggle;
   language?: string;
 };
 
-/** Used to run only the judge step on an already-completed set of candidate runs. */
-export type RunJudgeOnlyInput = {
+/** Used to run only the synthesis step on an already-completed set of candidate runs. */
+export type RunSynthesisOnlyInput = {
   prompt: string;
-  mode: SynthesisMode;
+  mode: SynthesisRunMode;
   candidateRuns: ModelRun[];
+  executionPlan: ExecutionPlan;
   presetId?: SynthesisPresetId;
-  executionPlan?: ExecutionPlan;
   language?: string;
 };
 
@@ -99,9 +114,9 @@ export type CompletedCandidateRun = ModelRun & {
   error: null;
 };
 
-export type CompletedJudgeRun = ModelRun & {
+export type CompletedSynthesisRun = ModelRun & {
   status: "completed";
-  parsed: JudgeModelOutput;
+  parsed: SynthesisModelOutput;
   error: null;
 };
 
@@ -147,9 +162,8 @@ export type BuildTraceEventsInput = {
   usedFallbackResolution: boolean;
 };
 
-export type BuildResolutionFromJudgeInput = {
-  judgeRun: CompletedJudgeRun;
-  conflicts: ConflictPoint[];
+export type BuildResolutionFromSynthesisInput = {
+  synthesisRun: CompletedSynthesisRun;
 };
 
 export type BuildCandidateResolutionInput = {
@@ -167,9 +181,9 @@ export type BuildReportInput = {
   summary: string;
   status: SynthesisReport["status"];
   candidateMode: CandidateMode;
-  pendingJudge: boolean;
+  pendingSynthesis: boolean;
   reportStage: ReportStage;
-  judgeStatus: JudgeStatus;
+  synthesisStatus: SynthesisStatus;
   executionPlan: ExecutionPlan | null;
   consensusItems: ConsensusItem[];
   successfulCandidateCount: number;
@@ -179,3 +193,8 @@ export type BuildReportInput = {
   modelRuns: ModelRun[];
   createdAt: string;
 };
+
+/** @deprecated Use SynthesisToggle instead. */
+export type JudgeMode = SynthesisToggle;
+/** @deprecated Use SynthesisRunMode instead. */
+export type SynthesisMode = SynthesisRunMode;

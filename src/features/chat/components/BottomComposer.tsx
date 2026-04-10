@@ -1,6 +1,6 @@
 import { type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, GitFork, LoaderCircle, Play, Settings2 } from "lucide-react";
+import { Activity, GitFork, LoaderCircle, Play, Settings2, Bot, Network } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { WorkspaceController } from "@/features/workspace/controller";
@@ -31,14 +31,15 @@ function CompactRouteSelector({ controller }: { controller: WorkspaceController 
 
   const selectedId = controller.selectedPresetId;
   const isCustom = selectedId === null;
-  const candidateCount = controller.selectedExecutionPlan.candidateSlots.length;
+  const plan = controller.selectedExecutionPlan;
+  const candidateCount = plan.candidateSlots.length;
 
   const activeLabel = isCustom
     ? "Custom"
     : presetOptions.find((p) => p.id === selectedId)?.label ?? "Custom";
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="group relative flex items-center gap-2 cursor-default">
       <div className="relative flex items-center">
         <select
           value={isCustom ? "__custom__" : selectedId}
@@ -48,7 +49,7 @@ function CompactRouteSelector({ controller }: { controller: WorkspaceController 
               controller.setSelectedPresetId(value as SynthesisPresetId);
             }
           }}
-          className="h-6 appearance-none rounded border border-border/50 bg-card/80 pl-2 pr-6 text-[10px] font-medium text-foreground outline-none transition-colors hover:border-border focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          className="h-6 appearance-none rounded-md border border-border/40 bg-surface pl-2 pr-6 text-[10px] font-medium text-foreground outline-none transition-all hover:border-primary/50 hover:bg-surface-container-high focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           disabled={controller.isBusy}
         >
           {presetOptions.map((opt) => (
@@ -57,12 +58,44 @@ function CompactRouteSelector({ controller }: { controller: WorkspaceController 
           {isCustom && <option value="__custom__">{t("Custom")}</option>}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-muted-foreground">
-          <Settings2 className="h-3 w-3" />
+          <Settings2 className="h-3.5 w-3.5" />
         </div>
       </div>
-      <span className="text-[10px] font-mono text-muted-foreground/60 tracking-tight">
-        {t(activeLabel)} · {candidateCount} {candidateCount === 1 ? t("model") : t("models")}
-      </span>
+      
+      <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-accent/50 transition-colors">
+        <Network className="h-3.5 w-3.5 text-primary/70" />
+        <span className="text-[10px] font-mono text-muted-foreground/80 tracking-tight">
+          {t(activeLabel)} · {candidateCount} {candidateCount === 1 ? t("model") : t("models")}
+        </span>
+      </div>
+
+      {/* Popover Tooltip for active execution plan models */}
+      <div className="absolute bottom-full mb-2 left-0 hidden group-hover:flex flex-col w-[260px] bg-background/95 backdrop-blur-xl rounded-xl border border-border/50 p-3 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200 origin-bottom-left">
+        <div className="text-[11px] font-semibold text-foreground/90 mb-2 flex items-center gap-1.5">
+          <Bot className="h-3.5 w-3.5 text-primary" />
+          <span>{t("Active Engine Routing")}</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {plan.candidateSlots.map((slot, i) => (
+            <div key={slot.id} className="flex flex-col bg-surface-container-low rounded-md py-1.5 px-2.5 border border-border/30">
+              <span className="text-muted-foreground/60 font-mono uppercase tracking-widest text-[8px] mb-0.5">{t("Candidate")} {i + 1}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-[10px] text-foreground truncate" title={slot.modelId}>{slot.modelId}</span>
+                <span className="text-muted-foreground/80 text-[9px] bg-accent/40 px-1.5 rounded truncate flex-shrink-0">{slot.provider}</span>
+              </div>
+            </div>
+          ))}
+          {plan.synthesisSlot && (
+            <div className="flex flex-col bg-primary/5 rounded-md py-1.5 px-2.5 border border-primary/20 mt-1">
+              <span className="text-primary/70 font-mono uppercase tracking-widest text-[8px] mb-0.5">{t("Synthesis")}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-[10px] text-primary/90 truncate" title={plan.synthesisSlot.modelId}>{plan.synthesisSlot.modelId}</span>
+                <span className="text-primary/70 text-[9px] bg-primary/10 px-1.5 rounded truncate flex-shrink-0">{plan.synthesisSlot.provider}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

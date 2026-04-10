@@ -9,7 +9,7 @@ export const NullableNonNegativeIntegerSchema = NonNegativeIntegerSchema.nullabl
 
 export const RunStatusSchema = z.enum(["pending", "running", "completed", "failed"]);
 export const ValidationStatusSchema = z.enum(["pending", "passed", "failed"]);
-export const ModelRoleSchema = z.enum(["strong", "fast", "judge"]);
+export const ModelRoleSchema = z.enum(["strong", "fast", "judge", "synthesis"]);
 export const ConflictSeveritySchema = z.enum(["low", "medium", "high"]);
 export const ConflictCategorySchema = z.enum([
   "fact",
@@ -28,6 +28,7 @@ export const ConsensusItemKindSchema = z.enum([
   "approach",
   "risk",
   "assumption",
+  "other",
 ]);
 
 export type EntityId = z.infer<typeof EntityIdSchema>;

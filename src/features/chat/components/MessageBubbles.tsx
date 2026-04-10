@@ -6,10 +6,13 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  LoaderCircle,
+  Play,
   Sparkles,
   Settings2,
 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import type { SynthesisReport } from "@/schema";
 import type { WorkspaceController } from "@/features/workspace/controller";
 import { RecipeEditorSheet } from "@/features/recipe/components/RecipeEditorSheet";
@@ -63,6 +66,7 @@ export function AssistantCompactReply(props: { report: SynthesisReport; isBusy?:
 /**
  * AssistantTurnCard — the ONLY assistant card used in Chat mode for multi-model results.
  * Shows merged answer + optional inline detail expansion (consensus/conflicts/models).
+ * When pendingSynthesis is true, shows candidate results + "Run Synthesis" button.
  * Does NOT show massive per-model panels — those belong in Compare mode.
  */
 export function AssistantTurnCard(props: {
@@ -77,9 +81,9 @@ export function AssistantTurnCard(props: {
 
   const conflictCount = props.report.conflicts.length;
   const consensusCount = props.report.consensus?.items.length ?? 0;
-  const candidateRuns = props.report.modelRuns.filter((r) => r.role !== "judge");
+  const candidateRuns = props.report.modelRuns.filter((r) => r.role !== "judge" && r.role !== "synthesis");
   const candidateCount = candidateRuns.length;
-  // Details button is available if we have multiple models, consensus, or conflicts. Single-model no-conflict might also have details now (the underlying model output).
+  const isPendingSynthesis = props.report.pendingSynthesis;
   const hasDetails = candidateCount > 0;
 
   return (
@@ -89,19 +93,25 @@ export function AssistantTurnCard(props: {
           <Sparkles className="w-4 h-4 text-primary" />
         </div>
         <div className="flex-1 min-w-0 space-y-0">
-          {/* Synthesis badge strip */}
+          {/* Badge strip */}
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
               <Sparkles className="h-3 w-3" />
-              {t("Synthesis")}
+              {isPendingSynthesis ? t("Candidates Ready") : t("Synthesis")}
             </span>
             <span className="text-[10px] text-muted-foreground font-mono">
               {candidateCount} {t("models")}
             </span>
-            {props.report.resolution && (
+            {!isPendingSynthesis && props.report.resolution && (
               <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                 <CheckCircle2 className="h-3 w-3" />
-                {t("Verified")}
+                {t("Synthesized")}
+              </span>
+            )}
+            {isPendingSynthesis && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                {t("Awaiting synthesis")}
               </span>
             )}
             
@@ -114,20 +124,66 @@ export function AssistantTurnCard(props: {
             </button>
           </div>
 
-          {/* Main answer bubble */}
-          <div className="bg-card/60 text-foreground border border-border/50 shadow-sm rounded-2xl rounded-tl-sm px-5 py-4 text-[15px] leading-relaxed">
-            {props.isRunning ? (
-              <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
-                <Sparkles className="w-4 h-4" />
-                {t("Synthesizing responses...")}
+          {/* Main answer bubble — differs based on pendingSynthesis */}
+          {isPendingSynthesis ? (
+            /* Manual mode: show candidate summaries, not synthesis */
+            <div className="space-y-3">
+              <div className="bg-card/60 text-foreground border border-border/50 shadow-sm rounded-2xl rounded-tl-sm px-5 py-4">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground mb-3">
+                  {t("Candidate Responses")}
+                </div>
+                <div className="space-y-3">
+                  {candidateRuns.map((run) => (
+                    <div key={run.id} className="rounded-xl border border-border/30 bg-background/50 p-3">
+                      <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/20">
+                        <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs font-medium">{run.provider}/{run.model}</span>
+                        <span className={`ml-auto rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase ${
+                          run.status === "completed" ? "badge-success" : "badge-error"
+                        }`}>
+                          {run.status}
+                        </span>
+                      </div>
+                      <div className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap">
+                        {run.parsed?.summary || run.rawText || t("No output")}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ) : (
-              <div className="whitespace-pre-wrap">{text}</div>
-            )}
-          </div>
 
-          {/* Expandable inline details (consensus + conflicts) — no model panels */}
-          {hasDetails && !props.isRunning && (
+              {/* Run Synthesis button */}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => props.controller.runManualSynthesis()}
+                disabled={props.controller.isBusy}
+                className="gap-2 w-full"
+              >
+                {props.controller.isBusy ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                {t("Run Synthesis")}
+              </Button>
+            </div>
+          ) : (
+            /* Auto mode or synthesis already complete: show merged answer */
+            <div className="bg-card/60 text-foreground border border-border/50 shadow-sm rounded-2xl rounded-tl-sm px-5 py-4 text-[15px] leading-relaxed">
+              {props.isRunning ? (
+                <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
+                  <Sparkles className="w-4 h-4" />
+                  {t("Synthesizing responses...")}
+                </div>
+              ) : (
+                <div className="whitespace-pre-wrap">{text}</div>
+              )}
+            </div>
+          )}
+
+          {/* Expandable inline details (consensus + conflicts) — only when synthesis is done */}
+          {hasDetails && !props.isRunning && !isPendingSynthesis && (
             <div className="mt-2">
               <button
                 type="button"

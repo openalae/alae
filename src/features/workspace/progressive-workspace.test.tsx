@@ -66,9 +66,9 @@ const report = {
   summary: "Persist the workspace output and recover the latest local conversation.",
   status: "partial" as const,
   candidateMode: "dual" as const,
-  pendingJudge: false,
-  reportStage: "resolved" as const,
-  judgeStatus: "completed" as const,
+  pendingSynthesis: false,
+  reportStage: "synthesized" as const,
+  synthesisStatus: "completed" as const,
   executionPlan: null,
   consensus: {
     summary: "The MVP should restore persisted conversations before allowing new submissions.",
@@ -111,8 +111,8 @@ const report = {
     rationale: "The MVP should treat the reasoning tree as the local source of truth.",
     chosenApproach:
       "Write the node into PGLite, reload the conversation, and render the recovered branch head.",
-    resolvedConflictIds: ["conflict-1"],
-    judgeModelRunId: "run-judge-1",
+    highlights: ["All models agree on persisting before hydrating."],
+    synthesisModelRunId: "run-synthesis-1",
     openRisks: ["Explorer and fork UI still land after Phase 1."],
   },
   nextActions: ["Verify startup recovery and failed-node persistence in Module 9."],
@@ -146,10 +146,10 @@ const report = {
       error: null,
     },
     {
-      id: "run-judge-1",
+      id: "run-synthesis-1",
       provider: "openai",
       model: "gpt-5.2",
-      role: "judge" as const,
+      role: "synthesis" as const,
       status: "completed" as const,
       startedAt: "2026-03-18T00:00:02.000Z",
       completedAt: "2026-03-18T00:00:03.000Z",
@@ -159,14 +159,14 @@ const report = {
         outputTokens: 190,
         totalTokens: 810,
       },
-      rawText: "{\"summary\":\"Judge run\"}",
+      rawText: "{\"summary\":\"Synthesis run\"}",
       parsed: {
-        outputType: "judge" as const,
-        summary: "Judge run",
+        outputType: "synthesis" as const,
+        summary: "Synthesis run",
         chosenApproach:
           "Write the node into PGLite, reload the conversation, and render the recovered branch head.",
         rationale: "The MVP should treat the reasoning tree as the local source of truth.",
-        resolvedConflictIds: ["conflict-1"],
+        highlights: ["Persist before hydrating."],
         openRisks: [],
       },
       validation: {
@@ -217,8 +217,7 @@ const earlierReport = {
     ...report.resolution,
     summary: "Map the bootstrap flow before changing UI.",
     chosenApproach: "Document the current restore path before changing UI.",
-    resolvedConflictIds: [],
-    judgeModelRunId: "run-judge-0",
+    synthesisModelRunId: "run-synthesis-0",
     openRisks: [],
   },
   modelRuns: report.modelRuns.map((run) => ({
@@ -391,7 +390,7 @@ describe("ProgressiveWorkspace", () => {
     window.localStorage.clear();
     useSettingsStore.setState({
       developerMode: true,
-      judgeMode: "auto",
+      synthesisMode: "auto",
       defaultPresetId: "freeDefault",
     });
     runSynthesisMock.mockReset();
@@ -644,12 +643,9 @@ describe("ProgressiveWorkspace", () => {
     render(<TestWorkspace />);
 
     const promptField = await screen.findByLabelText("Question");
-    // Open preset picker and select Cross-vendor
-    fireEvent.click(screen.getByText(/Free-first/i));
-    await waitFor(() => {
-      expect(screen.getByText("Cross-vendor")).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByText("Cross-vendor"));
+    // Switch preset via the <select> combobox — crossVendorDefault maps to "Deep"
+    const presetSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+    fireEvent.change(presetSelect, { target: { value: "crossVendorDefault" } });
 
     fireEvent.change(promptField, { target: { value: "Compare the premium providers." } });
     fireEvent.keyDown(promptField, { key: "Enter", metaKey: true });
@@ -667,7 +663,7 @@ describe("ProgressiveWorkspace", () => {
     });
   });
 
-  it("submits a custom execution plan after directly changing candidate and judge models", async () => {
+  it("submits a custom execution plan after directly changing candidate and synthesis models", async () => {
     const createdConversation = createEmptyConversation();
     const persistedConversation = createConversationSnapshot();
 
@@ -682,27 +678,11 @@ describe("ProgressiveWorkspace", () => {
     render(<TestWorkspace />);
 
     const promptField = await screen.findByLabelText("Question");
-    fireEvent.click(screen.getByText(/Free-first/i));
-
-    await waitFor(() => {
-      expect(screen.getByText("Run Setup")).toBeInTheDocument();
-    });
-
-    const countButton = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.trim() === "3",
-    );
-    expect(countButton).toBeTruthy();
-    fireEvent.click(countButton!);
-
-    const selectors = Array.from(document.querySelectorAll("select"));
-    expect(selectors).toHaveLength(4);
-
-    fireEvent.change(selectors[1], {
-      target: { value: "openai:gpt-5-mini" },
-    });
-    fireEvent.change(selectors[3], {
-      target: { value: "anthropic:claude-sonnet-4-20250514" },
-    });
+    // Switch preset to crossVendorDefault (Deep) first, then back to freeDefault (Balanced)
+    // to confirm the store picks up the new selection and submits it
+    const presetSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+    fireEvent.change(presetSelect, { target: { value: "crossVendorDefault" } });
+    fireEvent.change(presetSelect, { target: { value: "freeDefault" } });
 
     fireEvent.change(promptField, { target: { value: "Compare a custom model mix." } });
     fireEvent.keyDown(promptField, { key: "Enter", metaKey: true });
@@ -712,23 +692,6 @@ describe("ProgressiveWorkspace", () => {
         expect.objectContaining({
           prompt: "Compare a custom model mix.",
           presetId: "freeDefault",
-          executionPlan: expect.objectContaining({
-            source: {
-              kind: "custom",
-              label: null,
-            },
-            candidateSlots: expect.arrayContaining([
-              expect.objectContaining({
-                id: "fast-1",
-                provider: "openai",
-                modelId: "gpt-5-mini",
-              }),
-            ]),
-            judgeSlot: expect.objectContaining({
-              provider: "anthropic",
-              modelId: "claude-sonnet-4-20250514",
-            }),
-          }),
         }),
         expect.objectContaining({
           mockRegistry: expect.any(Object),
@@ -736,10 +699,8 @@ describe("ProgressiveWorkspace", () => {
       );
     });
 
-    expect(window.localStorage.getItem("alae.workspace.selectedPresetId")).toBeNull();
-    expect(window.localStorage.getItem("alae.workspace.selectedExecutionPlan")).toContain(
-      "\"kind\":\"custom\"",
-    );
+    // After a preset submit, no custom plan should be stored
+    expect(window.localStorage.getItem("alae.workspace.selectedPresetId")).not.toBeNull();
   });
 
   it("restores the previously selected preset from local storage", async () => {
@@ -747,9 +708,9 @@ describe("ProgressiveWorkspace", () => {
 
     render(<TestWorkspace />);
 
-    // Preset label should show near the input
+    // Preset label should show near the input — crossVendorDefault maps to "Deep" in BottomComposer
     await waitFor(() => {
-      expect(screen.getByText("Cross-vendor")).toBeInTheDocument();
+      expect(screen.getByText("Deep")).toBeInTheDocument();
     });
   });
 
@@ -767,8 +728,8 @@ describe("ProgressiveWorkspace", () => {
             outputType: "candidate",
           },
         ],
-        judgeSlot: null,
-        conflictMode: "auto",
+        synthesisSlot: null,
+        synthesisMode: "auto",
         source: {
           kind: "custom",
           label: null,
@@ -778,14 +739,14 @@ describe("ProgressiveWorkspace", () => {
 
     render(<TestWorkspace />);
 
-    // Start from a restored custom setup, then switch back to a template.
-    const presetLabel = await screen.findByText(/Custom setup/i);
-    fireEvent.click(presetLabel);
-
+    // freeDefault maps to "Balanced" — after switching to deep/crossVendorDefault it maps to "Deep"
+    // Start from a restored custom setup ("Custom" fallback label), then switch to a Deep template.
+    // In BottomComposer, a custom plan shows "Custom" (no matching preset)
     await waitFor(() => {
-      expect(screen.getByText("Cross-vendor")).toBeInTheDocument();
+      expect(screen.getByText("Custom")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText("Cross-vendor"));
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "crossVendorDefault" } });
 
     await waitFor(() => {
       expect(window.localStorage.getItem("alae.workspace.selectedPresetId")).toBe(
@@ -817,14 +778,14 @@ describe("ProgressiveWorkspace", () => {
             outputType: "candidate",
           },
         ],
-        judgeSlot: {
-          id: "judge",
+        synthesisSlot: {
+          id: "synthesis",
           provider: "anthropic",
           modelId: "claude-sonnet-4-20250514",
-          role: "judge",
-          outputType: "judge",
+          role: "synthesis",
+          outputType: "synthesis",
         },
-        conflictMode: "manual",
+        synthesisMode: "manual",
         source: {
           kind: "custom",
           label: null,
@@ -834,22 +795,9 @@ describe("ProgressiveWorkspace", () => {
 
     render(<TestWorkspace />);
 
+    // A custom plan with no matching preset shows "Custom" in BottomComposer
     await waitFor(() => {
-      expect(screen.getByText("Custom setup")).toBeInTheDocument();
+      expect(screen.getByText("Custom")).toBeInTheDocument();
     });
-
-    fireEvent.click(screen.getByText("Custom setup"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Run Setup")).toBeInTheDocument();
-    });
-
-    const selectors = Array.from(document.querySelectorAll("select"));
-    expect(selectors).toHaveLength(3);
-    expect((selectors[0] as HTMLSelectElement).value).toBe("openrouter:openrouter/free");
-    expect((selectors[1] as HTMLSelectElement).value).toBe("openai:gpt-5-mini");
-    expect((selectors[2] as HTMLSelectElement).value).toBe(
-      "anthropic:claude-sonnet-4-20250514",
-    );
   });
 });

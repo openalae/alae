@@ -359,7 +359,7 @@ export function ConversationTimeline(props: ConversationTimelineProps) {
               // Determine which assistant component to show
               let AssistantContent = null;
               if (node.synthesisReport) {
-                const candidateRunsCount = node.synthesisReport.modelRuns.filter(r => r.role !== "judge").length;
+                const candidateRunsCount = node.synthesisReport.modelRuns.filter(r => r.role !== "judge" && r.role !== "synthesis").length;
                 if (candidateRunsCount > 1 || node.synthesisReport.conflicts.length > 0) {
                   AssistantContent = (
                     <AssistantTurnCard

@@ -69,13 +69,28 @@ export const ResolutionSchema = z
     summary: NonEmptyStringSchema,
     rationale: NonEmptyStringSchema,
     chosenApproach: NonEmptyStringSchema,
-    resolvedConflictIds: z.array(EntityIdSchema),
-    judgeModelRunId: EntityIdSchema,
+    highlights: z.array(NonEmptyStringSchema).default([]),
+    synthesisModelRunId: EntityIdSchema.nullable().default(null),
     openRisks: z.array(NonEmptyStringSchema),
   })
-  .strict();
+  .strip();
 
 export const CandidateConsensusItemSchema = z
+  .object({
+    kind: z.preprocess(
+      (val) => (typeof val === "string" && ConsensusItemKindSchema.safeParse(val).success ? val : "other"),
+      ConsensusItemKindSchema,
+    ),
+    statement: NonEmptyStringSchema,
+    confidence: z.preprocess(
+      (val) => (typeof val === "string" && ConfidenceSchema.safeParse(val).success ? val : "medium"),
+      ConfidenceSchema,
+    ),
+  })
+  .strip();
+
+/** Strict version for internal persistence / test assertions. */
+export const CandidateConsensusItemStrictSchema = z
   .object({
     kind: ConsensusItemKindSchema,
     statement: NonEmptyStringSchema,
@@ -87,37 +102,56 @@ export const CandidateConflictObservationSchema = z
   .object({
     title: NonEmptyStringSchema,
     summary: NonEmptyStringSchema,
-    category: ConflictCategorySchema,
-    severity: ConflictSeveritySchema,
+    category: z.preprocess(
+      (val) => (typeof val === "string" && ConflictCategorySchema.safeParse(val).success ? val : "other"),
+      ConflictCategorySchema,
+    ),
+    severity: z.preprocess(
+      (val) => (typeof val === "string" && ConflictSeveritySchema.safeParse(val).success ? val : "medium"),
+      ConflictSeveritySchema,
+    ),
     question: NonEmptyStringSchema,
     stance: NonEmptyStringSchema,
   })
-  .strict();
+  .strip();
 
 export const CandidateModelOutputSchema = z
   .object({
-    outputType: z.literal("candidate"),
+    outputType: z.literal("candidate").default("candidate"),
     summary: NonEmptyStringSchema,
-    consensusItems: z.array(CandidateConsensusItemSchema),
-    conflictObservations: z.array(CandidateConflictObservationSchema),
-    recommendedActions: z.array(NonEmptyStringSchema),
+    consensusItems: z.array(CandidateConsensusItemSchema).default([]),
+    conflictObservations: z.array(CandidateConflictObservationSchema).default([]),
+    recommendedActions: z.array(NonEmptyStringSchema).default([]),
   })
-  .strict();
+  .strip();
 
-export const JudgeModelOutputSchema = z
+export const SynthesisModelOutputSchema = z
+  .object({
+    outputType: z.literal("synthesis").default("synthesis"),
+    summary: NonEmptyStringSchema,
+    chosenApproach: NonEmptyStringSchema,
+    rationale: NonEmptyStringSchema,
+    highlights: z.array(NonEmptyStringSchema).default([]),
+    openRisks: z.array(NonEmptyStringSchema).default([]),
+  })
+  .strip();
+
+/** @deprecated Kept for backward-compatible parsing of persisted judge runs. */
+export const LegacyJudgeModelOutputSchema = z
   .object({
     outputType: z.literal("judge"),
     summary: NonEmptyStringSchema,
     chosenApproach: NonEmptyStringSchema,
     rationale: NonEmptyStringSchema,
-    resolvedConflictIds: z.array(EntityIdSchema),
-    openRisks: z.array(NonEmptyStringSchema),
+    resolvedConflictIds: z.array(EntityIdSchema).default([]),
+    openRisks: z.array(NonEmptyStringSchema).default([]),
   })
-  .strict();
+  .strip();
 
 export const ParsedModelOutputSchema = z.discriminatedUnion("outputType", [
   CandidateModelOutputSchema,
-  JudgeModelOutputSchema,
+  SynthesisModelOutputSchema,
+  LegacyJudgeModelOutputSchema,
 ]);
 
 export const ModelRunErrorSchema = z
@@ -223,19 +257,28 @@ export const ConsensusSectionSchema = z
 export const CandidateModeSchema = z.enum(["single", "dual", "multi"]);
 export const ReportStageSchema = z.enum([
   "candidate_complete",
-  "awaiting_judge",
-  "judge_running",
+  "awaiting_synthesis",
+  "synthesized",
   "resolved",
   "failed",
 ]);
-export const JudgeStatusSchema = z.enum([
+export const SynthesisStatusSchema = z.enum([
   "not_needed",
   "pending",
   "running",
   "completed",
   "failed",
+  "off",
 ]);
-export const ConflictModeSchema = z.enum(["auto", "manual"]);
+export const SynthesisModeSchema = z.preprocess(
+  (val) => (val === "off" ? "manual" : val),
+  z.enum(["auto", "manual"]),
+);
+
+/** @deprecated Kept for backward-compatible parsing. */
+export const JudgeStatusSchema = SynthesisStatusSchema;
+/** @deprecated Kept for backward-compatible parsing. */
+export const ConflictModeSchema = SynthesisModeSchema;
 
 export const ExecutionPlanSlotSchema = z
   .object({
@@ -243,7 +286,7 @@ export const ExecutionPlanSlotSchema = z
     provider: NonEmptyStringSchema,
     modelId: NonEmptyStringSchema,
     role: ModelRoleSchema,
-    outputType: z.enum(["candidate", "judge"]),
+    outputType: z.enum(["candidate", "judge", "synthesis"]),
   })
   .strict();
 
@@ -262,12 +305,12 @@ export const ExecutionPlanSourceSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-export const ExecutionPlanSchema = z
+const ExecutionPlanObjectSchema = z
   .object({
     version: z.literal(1),
     candidateSlots: z.array(ExecutionPlanSlotSchema).min(1).max(3),
-    judgeSlot: ExecutionPlanSlotSchema.nullable(),
-    conflictMode: ConflictModeSchema.default("auto"),
+    synthesisSlot: ExecutionPlanSlotSchema.nullable().default(null),
+    synthesisMode: SynthesisModeSchema.default("auto"),
     source: ExecutionPlanSourceSchema,
   })
   .strict()
@@ -281,124 +324,127 @@ export const ExecutionPlanSchema = z
         });
       }
 
-      if (slot.role === "judge") {
+      if (slot.role === "judge" || slot.role === "synthesis") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "candidateSlots cannot include judge roles",
+          message: "candidateSlots cannot include judge or synthesis roles",
           path: ["candidateSlots", index, "role"],
         });
       }
     });
 
-    if (value.judgeSlot) {
-      if (value.judgeSlot.outputType !== "judge") {
+    if (value.synthesisSlot) {
+      if (value.synthesisSlot.outputType !== "synthesis" && value.synthesisSlot.outputType !== "judge") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "judgeSlot must use outputType='judge'",
-          path: ["judgeSlot", "outputType"],
+          message: "synthesisSlot must use outputType='synthesis'",
+          path: ["synthesisSlot", "outputType"],
         });
       }
-
-      if (value.judgeSlot.role !== "judge") {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "judgeSlot must use role='judge'",
-          path: ["judgeSlot", "role"],
-        });
-      }
-    }
-
-    if (value.candidateSlots.length === 1 && value.judgeSlot !== null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "single-candidate execution plans should not include a judge slot",
-        path: ["judgeSlot"],
-      });
     }
   });
+
+export const ExecutionPlanSchema = z.preprocess(
+  (input) => {
+    if (!isRecord(input)) return input;
+    return migrateExecutionPlan(input);
+  },
+  ExecutionPlanObjectSchema,
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-function getLegacyJudgeRun(modelRuns: unknown): Record<string, unknown> | null {
-  if (!Array.isArray(modelRuns)) {
-    return null;
-  }
-
-  for (let index = modelRuns.length - 1; index >= 0; index -= 1) {
-    const run = modelRuns[index];
-    if (isRecord(run) && run.role === "judge") {
-      return run;
-    }
-  }
-
-  return null;
-}
-
-function deriveLegacyJudgeStatus(input: unknown): z.infer<typeof JudgeStatusSchema> {
+function deriveSynthesisStatus(input: unknown): z.infer<typeof SynthesisStatusSchema> {
   if (!isRecord(input)) {
     return "not_needed";
   }
 
+  // New-format field
+  if (typeof input.synthesisStatus === "string") {
+    return input.synthesisStatus as z.infer<typeof SynthesisStatusSchema>;
+  }
+
+  // Legacy judge-based fields
   if (typeof input.judgeStatus === "string") {
-    return input.judgeStatus as z.infer<typeof JudgeStatusSchema>;
-  }
-
-  if (input.pendingJudge === true) {
-    return "pending";
-  }
-
-  const judgeRun = getLegacyJudgeRun(input.modelRuns);
-
-  if (!judgeRun) {
+    const legacyStatus = input.judgeStatus as string;
+    if (legacyStatus === "completed") return "completed";
+    if (legacyStatus === "pending") return "pending";
+    if (legacyStatus === "running") return "running";
+    if (legacyStatus === "failed") return "failed";
     return "not_needed";
   }
 
-  if (judgeRun.status === "running") {
-    return "running";
-  }
-
-  const parsed = isRecord(judgeRun.parsed) ? judgeRun.parsed : null;
-  if (judgeRun.status === "completed" && parsed?.outputType === "judge") {
-    return "completed";
-  }
-
-  if (judgeRun.status === "failed") {
-    const error = isRecord(judgeRun.error) ? judgeRun.error : null;
-    if (error?.code === "SKIPPED_NO_CANDIDATE_SUCCESS") {
-      return "not_needed";
-    }
-
-    return "failed";
+  if (input.pendingJudge === true || input.pendingSynthesis === true) {
+    return "pending";
   }
 
   return "not_needed";
 }
 
-function deriveLegacyReportStage(input: unknown): z.infer<typeof ReportStageSchema> {
+function deriveReportStage(input: unknown): z.infer<typeof ReportStageSchema> {
   if (!isRecord(input)) {
     return "resolved";
   }
 
   if (typeof input.reportStage === "string") {
-    return input.reportStage as z.infer<typeof ReportStageSchema>;
+    const stage = input.reportStage as string;
+    // Map legacy stages to new ones
+    if (stage === "awaiting_judge") return "awaiting_synthesis";
+    if (stage === "judge_running") return "awaiting_synthesis";
+    return stage as z.infer<typeof ReportStageSchema>;
   }
 
   if (input.status === "failed") {
     return "failed";
   }
 
-  const judgeStatus = deriveLegacyJudgeStatus(input);
-  if (judgeStatus === "pending") {
-    return "awaiting_judge";
+  const synthStatus = deriveSynthesisStatus(input);
+  if (synthStatus === "pending" || synthStatus === "running") {
+    return "awaiting_synthesis";
   }
 
-  if (judgeStatus === "running") {
-    return "judge_running";
+  if (synthStatus === "completed") {
+    return "synthesized";
   }
 
   return "resolved";
+}
+
+/** Migrate legacy resolution fields (judgeModelRunId → synthesisModelRunId, resolvedConflictIds → highlights). */
+function migrateResolution(input: unknown): unknown {
+  if (!isRecord(input)) return input;
+  const result = { ...input };
+  if ("judgeModelRunId" in result && !("synthesisModelRunId" in result)) {
+    result.synthesisModelRunId = result.judgeModelRunId;
+    delete result.judgeModelRunId;
+  }
+  if ("resolvedConflictIds" in result && !("highlights" in result)) {
+    result.highlights = [];
+    delete result.resolvedConflictIds;
+  }
+  return result;
+}
+
+/** Migrate legacy ExecutionPlan (judgeSlot → synthesisSlot, conflictMode → synthesisMode). */
+function migrateExecutionPlan(input: unknown): unknown {
+  if (!isRecord(input)) return input;
+  const result = { ...input };
+  if ("judgeSlot" in result && !("synthesisSlot" in result)) {
+    const legacySlot = result.judgeSlot;
+    if (isRecord(legacySlot)) {
+      result.synthesisSlot = { ...legacySlot, role: "synthesis", outputType: "synthesis" };
+    } else {
+      result.synthesisSlot = null;
+    }
+    delete result.judgeSlot;
+  }
+  if ("conflictMode" in result && !("synthesisMode" in result)) {
+    result.synthesisMode = result.conflictMode;
+    delete result.conflictMode;
+  }
+  return result;
 }
 
 const SynthesisReportObjectSchema = z
@@ -408,9 +454,9 @@ const SynthesisReportObjectSchema = z
     summary: NonEmptyStringSchema,
     status: z.enum(["ready", "partial", "failed"]),
     candidateMode: CandidateModeSchema.default("multi"),
-    pendingJudge: z.boolean().default(false),
+    pendingSynthesis: z.boolean().default(false),
     reportStage: ReportStageSchema.default("resolved"),
-    judgeStatus: JudgeStatusSchema.default("not_needed"),
+    synthesisStatus: SynthesisStatusSchema.default("not_needed"),
     executionPlan: ExecutionPlanSchema.nullable().default(null),
     consensus: ConsensusSectionSchema,
     conflicts: z.array(ConflictPointSchema),
@@ -427,16 +473,36 @@ export const SynthesisReportSchema = z
       return input;
     }
 
+    const migrated = { ...input };
+
+    // Migrate legacy pendingJudge → pendingSynthesis
+    if ("pendingJudge" in migrated && !("pendingSynthesis" in migrated)) {
+      migrated.pendingSynthesis = migrated.pendingJudge;
+      delete migrated.pendingJudge;
+    }
+    // Remove leftover legacy judgeStatus key (replaced by synthesisStatus)
+    if ("judgeStatus" in migrated) {
+      delete migrated.judgeStatus;
+    }
+
+    // Migrate legacy resolution fields
+    if (isRecord(migrated.resolution)) {
+      migrated.resolution = migrateResolution(migrated.resolution);
+    }
+
+    // Migrate legacy execution plan
+    if (isRecord(migrated.executionPlan)) {
+      migrated.executionPlan = migrateExecutionPlan(migrated.executionPlan);
+    }
+
     return {
-      ...input,
-      reportStage: deriveLegacyReportStage(input),
-      judgeStatus: deriveLegacyJudgeStatus(input),
-      executionPlan: "executionPlan" in input ? input.executionPlan : null,
+      ...migrated,
+      reportStage: deriveReportStage(migrated),
+      synthesisStatus: deriveSynthesisStatus(migrated),
+      executionPlan: "executionPlan" in migrated ? migrated.executionPlan : null,
     };
   }, SynthesisReportObjectSchema)
   .superRefine((value, ctx) => {
-    const conflictIds = new Set(value.conflicts.map((conflict) => conflict.id));
-
     if (value.status === "failed" && value.resolution !== null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -445,11 +511,11 @@ export const SynthesisReportSchema = z
       });
     }
 
-    // When pendingJudge is true, a partial report without resolution is allowed
-    if (value.status !== "failed" && value.resolution === null && !value.pendingJudge) {
+    // When pendingSynthesis is true, a partial report without resolution is allowed
+    if (value.status !== "failed" && value.resolution === null && !value.pendingSynthesis) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "ready and partial reports must include a resolution (or set pendingJudge=true)",
+        message: "ready and partial reports must include a resolution (or set pendingSynthesis=true)",
         path: ["resolution"],
       });
     }
@@ -460,18 +526,6 @@ export const SynthesisReportSchema = z
         message: "ready and partial reports must include at least one completed run",
         path: ["modelRuns"],
       });
-    }
-
-    if (value.resolution !== null) {
-      for (const [index, conflictId] of value.resolution.resolvedConflictIds.entries()) {
-        if (!conflictIds.has(conflictId)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "resolvedConflictIds must reference conflicts declared on the report",
-            path: ["resolution", "resolvedConflictIds", index],
-          });
-        }
-      }
     }
 
     if (value.status === "failed" && value.reportStage !== "failed") {
@@ -490,34 +544,26 @@ export const SynthesisReportSchema = z
       });
     }
 
-    if (value.pendingJudge !== (value.reportStage === "awaiting_judge")) {
+    if (value.pendingSynthesis !== (value.reportStage === "awaiting_synthesis")) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "pendingJudge must match reportStage='awaiting_judge'",
-        path: ["pendingJudge"],
+        message: "pendingSynthesis must match reportStage='awaiting_synthesis'",
+        path: ["pendingSynthesis"],
       });
     }
 
-    if (value.reportStage === "awaiting_judge" && value.judgeStatus !== "pending") {
+    if (value.reportStage === "awaiting_synthesis" && value.synthesisStatus !== "pending") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "awaiting_judge reports must set judgeStatus='pending'",
-        path: ["judgeStatus"],
+        message: "awaiting_synthesis reports must set synthesisStatus='pending'",
+        path: ["synthesisStatus"],
       });
     }
 
-    if (value.judgeStatus === "pending" && value.reportStage !== "awaiting_judge") {
+    if (value.reportStage === "awaiting_synthesis" && value.resolution !== null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "judgeStatus='pending' requires reportStage='awaiting_judge'",
-        path: ["reportStage"],
-      });
-    }
-
-    if (value.reportStage === "awaiting_judge" && value.resolution !== null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "awaiting_judge reports must not include a resolution yet",
+        message: "awaiting_synthesis reports must not include a resolution yet",
         path: ["resolution"],
       });
     }
@@ -546,7 +592,9 @@ export type Resolution = z.infer<typeof ResolutionSchema>;
 export type CandidateConsensusItem = z.infer<typeof CandidateConsensusItemSchema>;
 export type CandidateConflictObservation = z.infer<typeof CandidateConflictObservationSchema>;
 export type CandidateModelOutput = z.infer<typeof CandidateModelOutputSchema>;
-export type JudgeModelOutput = z.infer<typeof JudgeModelOutputSchema>;
+export type SynthesisModelOutput = z.infer<typeof SynthesisModelOutputSchema>;
+/** @deprecated Use SynthesisModelOutput instead. */
+export type JudgeModelOutput = z.infer<typeof LegacyJudgeModelOutputSchema>;
 export type ParsedModelOutput = z.infer<typeof ParsedModelOutputSchema>;
 export type ModelRunError = z.infer<typeof ModelRunErrorSchema>;
 export type ModelRunValidation = z.infer<typeof ModelRunValidationSchema>;
@@ -554,8 +602,12 @@ export type ModelRun = z.infer<typeof ModelRunSchema>;
 export type ConsensusSection = z.infer<typeof ConsensusSectionSchema>;
 export type CandidateMode = z.infer<typeof CandidateModeSchema>;
 export type ReportStage = z.infer<typeof ReportStageSchema>;
-export type JudgeStatus = z.infer<typeof JudgeStatusSchema>;
-export type ConflictMode = z.infer<typeof ConflictModeSchema>;
+export type SynthesisStatus = z.infer<typeof SynthesisStatusSchema>;
+export type SynthesisMode = z.infer<typeof SynthesisModeSchema>;
+/** @deprecated Use SynthesisStatus instead. */
+export type JudgeStatus = SynthesisStatus;
+/** @deprecated Use SynthesisMode instead. */
+export type ConflictMode = SynthesisMode;
 export type ExecutionPlanSlot = z.infer<typeof ExecutionPlanSlotSchema>;
 export type ExecutionPlanSource = z.infer<typeof ExecutionPlanSourceSchema>;
 export type ExecutionPlan = z.infer<typeof ExecutionPlanSchema>;

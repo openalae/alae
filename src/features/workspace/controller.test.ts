@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
   buildExecutionPlanFromModelSelection,
-  buildExecutionPlanFromPreset,
+  resolveModelSelectionFromPreset,
 } from "@/features/consensus";
 import { buildModelCatalogRecord } from "@/features/settings/providers";
 import {
@@ -139,7 +138,14 @@ describe("workspace controller helpers", () => {
     });
 
     expect(result.effectiveMode).toBe("mock");
-    const executionPlan = buildExecutionPlanFromPreset("freeDefault", "auto");
+    const catalog = buildModelCatalogRecord();
+    const selection = resolveModelSelectionFromPreset("freeDefault", catalog);
+    const executionPlan = buildExecutionPlanFromModelSelection({
+      modelCatalog: catalog,
+      selection,
+      synthesisMode: "auto",
+      label: "Free-first",
+    });
     expect(createMockRegistry).toHaveBeenCalledWith(executionPlan);
     expect(runSynthesisImpl).toHaveBeenCalledWith(
       {
@@ -147,7 +153,7 @@ describe("workspace controller helpers", () => {
         mode: "mock",
         presetId: "freeDefault",
         executionPlan,
-        judgeMode: undefined,
+        synthesisMode: undefined,
         language: undefined,
       },
       {
@@ -199,7 +205,7 @@ describe("workspace controller helpers", () => {
       mode: "real",
       presetId: "freeDefault",
       executionPlan,
-      judgeMode: undefined,
+      synthesisMode: undefined,
       language: undefined,
     });
   });
@@ -215,7 +221,14 @@ describe("workspace controller helpers", () => {
     });
 
     expect(result.effectiveMode).toBe("real");
-    const executionPlan = buildExecutionPlanFromPreset("freeDefault", "auto");
+    const catalog = buildModelCatalogRecord();
+    const selection = resolveModelSelectionFromPreset("freeDefault", catalog);
+    const executionPlan = buildExecutionPlanFromModelSelection({
+      modelCatalog: catalog,
+      selection,
+      synthesisMode: "auto",
+      label: "Free-first",
+    });
     expect(runSynthesisImpl).toHaveBeenCalledWith({
       prompt: "Draft module 7",
       mode: "real",

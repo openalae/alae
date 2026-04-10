@@ -1,9 +1,10 @@
 import type {
   ExecutionPlan,
-  JudgeMode,
+  PresetSlotTemplate,
   SynthesisModelSlot,
   SynthesisPreset,
   SynthesisPresetId,
+  SynthesisToggle,
 } from "@/features/consensus/types";
 import type {
   ModelCatalogItem,
@@ -20,7 +21,7 @@ export type SynthesisPresetDefinition = {
 
 export type ModelSelectionState = {
   candidateModelIds: string[];
-  judgeModelId: string | null;
+  synthesisModelId: string | null;
 };
 
 const candidateSlotOrder = ["strong", "fast-1", "fast-2"] as const;
@@ -40,31 +41,58 @@ function findModelById(
   return getAllCatalogModels(modelCatalog).find((model) => model.id === modelId) ?? null;
 }
 
-function findPreferredModelForProvider(input: {
+function findBestModelForTemplate(input: {
+  template: PresetSlotTemplate;
   modelCatalog: ModelCatalogRecord;
-  provider: SupportedProviderId;
-  preferredModelId?: string;
-  excludeModelIds?: ReadonlySet<string>;
-  supports: "supportsCandidate" | "supportsJudge";
-}) {
-  const providerModels = input.modelCatalog[input.provider] ?? [];
-  const excludedIds = input.excludeModelIds ?? new Set<string>();
-  const preferredMatch = input.preferredModelId
-    ? providerModels.find(
-        (model) =>
-          model.modelId === input.preferredModelId &&
-          model[input.supports] &&
-          !excludedIds.has(model.id),
-      ) ?? null
-    : null;
+  usedProviders: ReadonlySet<SupportedProviderId>;
+  usedModelIds: ReadonlySet<string>;
+}): ModelCatalogItem | null {
+  const isCandidate = input.template.outputType === "candidate";
+  const allModels = getAllCatalogModels(input.modelCatalog).filter(
+    (m) =>
+      !input.usedModelIds.has(m.id) &&
+      (isCandidate ? m.supportsCandidate : m.supportsJudge)
+  );
 
-  if (preferredMatch) {
-    return preferredMatch;
+  if (input.template.provider && input.template.modelId) {
+    const specificMatch = allModels.find(
+      (m) => m.provider === input.template.provider && m.modelId === input.template.modelId
+    );
+    if (specificMatch) {
+      return specificMatch;
+    }
   }
 
-  return (
-    providerModels.find((model) => model[input.supports] && !excludedIds.has(model.id)) ?? null
-  );
+  let scoredCandidates = allModels
+    .map((model) => {
+      let score = 0;
+      if (model.availability === "ready") score += 1000;
+
+      if (input.template.requireTags && input.template.requireTags.length > 0) {
+        if (!input.template.requireTags.every((tag) => model.tags.includes(tag))) {
+          return { model, score: -1 };
+        }
+        score += 100;
+      }
+
+      if (input.template.excludeTags && input.template.excludeTags.length > 0) {
+        if (input.template.excludeTags.some((tag) => model.tags.includes(tag))) {
+          return { model, score: -1 };
+        }
+      }
+
+      if (input.template.avoidUsedProviders && input.usedProviders.has(model.provider)) {
+        score -= 50;
+      } else if (input.template.avoidUsedProviders && !input.usedProviders.has(model.provider)) {
+        score += 50;
+      }
+
+      return { model, score };
+    })
+    .filter((c) => c.score >= 0);
+
+  scoredCandidates.sort((a, b) => b.score - a.score);
+  return scoredCandidates[0]?.model ?? null;
 }
 
 function getFallbackCandidateModel(
@@ -78,23 +106,23 @@ function getFallbackCandidateModel(
   );
 }
 
-function getFallbackJudgeModel(
+function getFallbackSynthesisModel(
   modelCatalog: ModelCatalogRecord,
   candidateModelIds: readonly string[],
-  preferredJudgeId: string | null,
+  preferredSynthesisId: string | null,
 ) {
-  const preferredJudge = findModelById(modelCatalog, preferredJudgeId);
+  const preferredModel = findModelById(modelCatalog, preferredSynthesisId);
 
-  if (preferredJudge?.supportsJudge) {
-    return preferredJudge.id;
+  if (preferredModel?.supportsJudge) {
+    return preferredModel.id;
   }
 
-  const candidateJudge = candidateModelIds
+  const candidateMatch = candidateModelIds
     .map((candidateId) => findModelById(modelCatalog, candidateId))
     .find((model) => model?.supportsJudge);
 
-  if (candidateJudge) {
-    return candidateJudge.id;
+  if (candidateMatch) {
+    return candidateMatch.id;
   }
 
   return getAllCatalogModels(modelCatalog).find((model) => model.supportsJudge)?.id ?? null;
@@ -115,31 +143,30 @@ export const crossVendorDefaultPreset: SynthesisPreset = {
   slots: [
     {
       id: "strong",
-      provider: "anthropic",
-      modelId: "claude-sonnet-4-20250514",
       role: "strong",
       outputType: "candidate",
+      requireTags: ["tier:smart"],
     },
     {
       id: "fast-1",
-      provider: "openai",
-      modelId: "gpt-5-mini",
       role: "fast",
       outputType: "candidate",
+      requireTags: ["tier:fast"],
+      avoidUsedProviders: true,
     },
     {
       id: "fast-2",
-      provider: "google",
-      modelId: "gemini-2.5-flash",
       role: "fast",
       outputType: "candidate",
+      requireTags: ["tier:fast"],
+      avoidUsedProviders: true,
     },
     {
-      id: "judge",
-      provider: "openai",
-      modelId: "gpt-5.2",
-      role: "judge",
-      outputType: "judge",
+      id: "synthesis",
+      role: "synthesis",
+      outputType: "synthesis",
+      requireTags: ["tier:smart"],
+      avoidUsedProviders: true,
     },
   ],
 };
@@ -149,31 +176,27 @@ export const freeDefaultPreset: SynthesisPreset = {
   slots: [
     {
       id: "strong",
-      provider: "openrouter",
-      modelId: "openrouter/free",
       role: "strong",
       outputType: "candidate",
+      requireTags: ["free"],
     },
     {
       id: "fast-1",
-      provider: "ollama",
-      modelId: "qwen3:8b",
       role: "fast",
       outputType: "candidate",
+      requireTags: ["local"],
     },
     {
       id: "fast-2",
-      provider: "ollama",
-      modelId: "gemma3:4b",
       role: "fast",
       outputType: "candidate",
+      requireTags: ["local"],
     },
     {
-      id: "judge",
-      provider: "openrouter",
-      modelId: "openrouter/free",
-      role: "judge",
-      outputType: "judge",
+      id: "synthesis",
+      role: "synthesis",
+      outputType: "synthesis",
+      requireTags: ["free"],
     },
   ],
 };
@@ -184,46 +207,35 @@ export const singlePreset: SynthesisPreset = {
   slots: [
     {
       id: "strong",
-      provider: "openrouter",
-      modelId: "openrouter/free",
       role: "strong",
       outputType: "candidate",
-    },
-    // Judge slot is structurally required but skipped at runtime in single mode
-    {
-      id: "judge",
-      provider: "openrouter",
-      modelId: "openrouter/free",
-      role: "judge",
-      outputType: "judge",
+      requireTags: ["tier:fast"],
     },
   ],
 };
 
-/** Dual-model preset: two candidates, conflict resolution via auto or manual judge. */
+/** Dual-model preset: two candidates with optional synthesis. */
 export const dualPreset: SynthesisPreset = {
   id: "dual",
   slots: [
     {
       id: "strong",
-      provider: "openrouter",
-      modelId: "openrouter/free",
       role: "strong",
       outputType: "candidate",
+      requireTags: ["tier:smart"],
     },
     {
       id: "fast-1",
-      provider: "ollama",
-      modelId: "qwen3:8b",
       role: "fast",
       outputType: "candidate",
+      requireTags: ["tier:fast"],
+      avoidUsedProviders: true,
     },
     {
-      id: "judge",
-      provider: "openrouter",
-      modelId: "openrouter/free",
-      role: "judge",
-      outputType: "judge",
+      id: "synthesis",
+      role: "synthesis",
+      outputType: "synthesis",
+      requireTags: ["tier:smart"],
     },
   ],
 };
@@ -239,7 +251,7 @@ export const synthesisPresetDefinitions: SynthesisPresetDefinition[] = [
     id: "dual",
     label: "Dual",
     description:
-      "Two models run in parallel. Conflicts are shown and can be resolved automatically or manually.",
+      "Two models run in parallel. Differences are highlighted and optionally synthesized.",
     providerSummary: "2 models",
   },
   {
@@ -275,28 +287,7 @@ export function getSynthesisPreset(
   return synthesisPresets[presetId];
 }
 
-export function buildExecutionPlanFromPreset(
-  presetId: SynthesisPresetId = "freeDefault",
-  conflictMode: JudgeMode = "auto",
-): ExecutionPlan {
-  const preset = getSynthesisPreset(presetId);
-  const candidateSlots = preset.slots.filter((slot) => slot.outputType === "candidate");
-  const judgeSlot =
-    candidateSlots.length > 1
-      ? preset.slots.find((slot) => slot.outputType === "judge") ?? null
-      : null;
 
-  return {
-    version: 1,
-    candidateSlots: candidateSlots.map((slot) => ({ ...slot })),
-    judgeSlot: judgeSlot ? { ...judgeSlot } : null,
-    conflictMode,
-    source: {
-      kind: "preset",
-      presetId,
-    },
-  };
-}
 
 export function resolveModelSelectionFromPreset(
   presetId: SynthesisPresetId,
@@ -305,22 +296,21 @@ export function resolveModelSelectionFromPreset(
   const preset = getSynthesisPreset(presetId);
   const selectedCandidateIds: string[] = [];
   const usedCandidateIds = new Set<string>();
+  const usedProviders = new Set<SupportedProviderId>();
 
-  for (const slot of preset.slots.filter((candidateSlot) => candidateSlot.outputType === "candidate")) {
-    const match = findPreferredModelForProvider({
+  for (const slot of preset.slots.filter((s) => s.outputType === "candidate")) {
+    const match = findBestModelForTemplate({
+      template: slot,
       modelCatalog,
-      provider: slot.provider,
-      preferredModelId: slot.modelId,
-      excludeModelIds: usedCandidateIds,
-      supports: "supportsCandidate",
+      usedProviders,
+      usedModelIds: usedCandidateIds,
     });
 
-    if (!match) {
-      continue;
+    if (match) {
+      selectedCandidateIds.push(match.id);
+      usedCandidateIds.add(match.id);
+      usedProviders.add(match.provider);
     }
-
-    selectedCandidateIds.push(match.id);
-    usedCandidateIds.add(match.id);
   }
 
   if (selectedCandidateIds.length === 0) {
@@ -332,21 +322,21 @@ export function resolveModelSelectionFromPreset(
     }
   }
 
-  const judgeSlot = preset.slots.find((slot) => slot.outputType === "judge");
-  const judgeMatch = judgeSlot
-    ? findPreferredModelForProvider({
+  const synthesisSlot = preset.slots.find((slot) => slot.outputType === "synthesis");
+  const synthesisMatch = synthesisSlot
+    ? findBestModelForTemplate({
+        template: synthesisSlot,
         modelCatalog,
-        provider: judgeSlot.provider,
-        preferredModelId: judgeSlot.modelId,
-        supports: "supportsJudge",
+        usedProviders,
+        usedModelIds: usedCandidateIds,
       })
     : null;
 
   return {
     candidateModelIds: selectedCandidateIds.slice(0, candidateSlotOrder.length),
-    judgeModelId:
+    synthesisModelId:
       selectedCandidateIds.length > 1
-        ? getFallbackJudgeModel(modelCatalog, selectedCandidateIds, judgeMatch?.id ?? null)
+        ? (synthesisMatch?.id ?? getFallbackSynthesisModel(modelCatalog, selectedCandidateIds, null))
         : null,
   };
 }
@@ -369,12 +359,12 @@ export function normalizeModelSelection(input: {
 
   return {
     candidateModelIds: normalizedCandidateIds,
-    judgeModelId:
+    synthesisModelId:
       normalizedCandidateIds.length > 1
-        ? getFallbackJudgeModel(
+        ? getFallbackSynthesisModel(
             input.modelCatalog,
             normalizedCandidateIds,
-            input.selection.judgeModelId,
+            input.selection.synthesisModelId,
           )
         : null,
   };
@@ -383,7 +373,7 @@ export function normalizeModelSelection(input: {
 export function buildExecutionPlanFromModelSelection(input: {
   modelCatalog: ModelCatalogRecord;
   selection: ModelSelectionState;
-  conflictMode?: JudgeMode;
+  synthesisMode?: SynthesisToggle;
   label?: string | null;
 }): ExecutionPlan {
   const candidateModels = input.selection.candidateModelIds
@@ -395,26 +385,23 @@ export function buildExecutionPlanFromModelSelection(input: {
     throw new Error("Execution plans require at least one candidate model.");
   }
 
-  const judgeModel =
-    candidateModels.length > 1
-      ? findModelById(input.modelCatalog, input.selection.judgeModelId)
-      : null;
+  const synthesisModel = findModelById(input.modelCatalog, input.selection.synthesisModelId);
   const candidateSlots = buildCandidateSlots(candidateModels);
 
   return {
     version: 1,
     candidateSlots,
-    judgeSlot:
-      candidateSlots.length > 1 && judgeModel?.supportsJudge
+    synthesisSlot:
+      synthesisModel?.supportsJudge
         ? {
-            id: "judge",
-            provider: judgeModel.provider,
-            modelId: judgeModel.modelId,
-            role: "judge",
-            outputType: "judge",
+            id: "synthesis",
+            provider: synthesisModel.provider,
+            modelId: synthesisModel.modelId,
+            role: "synthesis",
+            outputType: "synthesis",
           }
         : null,
-    conflictMode: input.conflictMode ?? "auto",
+    synthesisMode: input.synthesisMode ?? "auto",
     source: {
       kind: "custom",
       label: input.label ?? null,
@@ -427,7 +414,7 @@ export function areModelSelectionsEqual(
   right: ModelSelectionState,
 ) {
   return (
-    left.judgeModelId === right.judgeModelId &&
+    left.synthesisModelId === right.synthesisModelId &&
     left.candidateModelIds.length === right.candidateModelIds.length &&
     left.candidateModelIds.every((candidateId, index) => candidateId === right.candidateModelIds[index])
   );

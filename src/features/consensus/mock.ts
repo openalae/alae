@@ -7,7 +7,7 @@ import type {
   SynthesisPresetId,
   SynthesisSlotId,
 } from "@/features/consensus/types";
-import type { CandidateModelOutput, JudgeModelOutput } from "@/schema";
+import type { CandidateModelOutput, SynthesisModelOutput } from "@/schema";
 
 function isTextPart(part: unknown): part is { type: "text"; text: string } {
   return (
@@ -41,20 +41,18 @@ function extractUserPromptText(options: LanguageModelV1CallOptions) {
 }
 
 
-function extractJudgePayload(promptText: string) {
+function extractSynthesisPayload(promptText: string) {
   const jsonStart = promptText.indexOf("{");
 
   if (jsonStart < 0) {
     return {
       prompt: "the current user request",
-      conflictIds: [] as string[],
     };
   }
 
   try {
     const payload = JSON.parse(promptText.slice(jsonStart)) as {
       prompt?: unknown;
-      conflicts?: Array<{ id?: unknown }>;
     };
 
     return {
@@ -62,16 +60,10 @@ function extractJudgePayload(promptText: string) {
         typeof payload.prompt === "string" && payload.prompt.trim().length > 0
           ? payload.prompt.trim()
           : "the current user request",
-      conflictIds: Array.isArray(payload.conflicts)
-        ? payload.conflicts
-            .map((conflict) => (typeof conflict?.id === "string" ? conflict.id : null))
-            .filter((conflictId): conflictId is string => conflictId !== null)
-        : [],
     };
   } catch {
     return {
       prompt: "the current user request",
-      conflictIds: [] as string[],
     };
   }
 }
@@ -215,15 +207,18 @@ function buildFastCandidateTwo(): CandidateModelOutput {
   };
 }
 
-function buildJudgeOutput(_promptText: string, conflictIds: string[]): JudgeModelOutput {
+function buildSynthesisOutput(_promptText: string): SynthesisModelOutput {
   return {
-    outputType: "judge",
+    outputType: "synthesis",
     summary: `Use a progressive drill-down workspace for {{topic}}.`,
     chosenApproach:
       "Keep the main view centered on the synthesis report and move raw model output into expandable run cards.",
     rationale:
       "This preserves a high-signal default view while still giving users complete access to source runs, validation state, and telemetry details on demand.",
-    resolvedConflictIds: conflictIds,
+    highlights: [
+      "All models agree on high-signal synthesis-first presentation.",
+      "Progressive disclosure pattern preferred for raw output.",
+    ],
     openRisks: [
       "Real-provider latency will vary once live keys are configured.",
       "Truth Panel telemetry remains a placeholder until module 8 consumes the stored snapshot.",
@@ -273,15 +268,15 @@ export function createDefaultMockRegistry(
         buildObject: () =>
           buildFastCandidateTwo(),
       }),
-    judge: (modelId, provider) =>
+    synthesis: (modelId, provider) =>
       createMockLanguageModel({
         provider,
         modelId,
         promptTokens: 624,
         completionTokens: 196,
         buildObject: (options) => {
-          const payload = extractJudgePayload(extractUserPromptText(options));
-          return buildJudgeOutput(payload.prompt, payload.conflictIds);
+          const payload = extractSynthesisPayload(extractUserPromptText(options));
+          return buildSynthesisOutput(payload.prompt);
         },
       }),
   });
@@ -292,7 +287,7 @@ export function createDefaultMockRegistryForExecutionPlan(
 ): MockRegistry {
   const slots = [
     ...executionPlan.candidateSlots,
-    ...(executionPlan.judgeSlot ? [executionPlan.judgeSlot] : []),
+    ...(executionPlan.synthesisSlot ? [executionPlan.synthesisSlot] : []),
   ];
 
   return slots.reduce<MockRegistry>((registry, slot) => {
@@ -326,15 +321,15 @@ export function createDefaultMockRegistryForExecutionPlan(
       });
     }
 
-    if (slot.id === "judge") {
-      registry.judge = createMockLanguageModel({
+    if (slot.id === "synthesis") {
+      registry.synthesis = createMockLanguageModel({
         provider: slot.provider,
         modelId: slot.modelId,
         promptTokens: 624,
         completionTokens: 196,
         buildObject: (options) => {
-          const payload = extractJudgePayload(extractUserPromptText(options));
-          return buildJudgeOutput(payload.prompt, payload.conflictIds);
+          const payload = extractSynthesisPayload(extractUserPromptText(options));
+          return buildSynthesisOutput(payload.prompt);
         },
       });
     }

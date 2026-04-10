@@ -40,7 +40,7 @@ describe("consensus preset helpers", () => {
         "ollama:deepseek-r1:8b",
         "ollama:llama3.2:latest",
       ],
-      judgeModelId: "openrouter:openrouter/free",
+      synthesisModelId: "openrouter:openrouter/free",
     });
   });
 
@@ -71,21 +71,21 @@ describe("consensus preset helpers", () => {
           "openrouter:openrouter/free",
           "missing:model",
         ],
-        judgeModelId: "missing:judge",
+        synthesisModelId: "missing:synthesis",
       },
       fallbackPresetId: "dual",
     });
 
     expect(selection).toEqual({
       candidateModelIds: ["openrouter:openrouter/free"],
-      judgeModelId: null,
+      synthesisModelId: null,
     });
 
     expect(
       buildExecutionPlanFromModelSelection({
         modelCatalog: catalog,
         selection,
-        conflictMode: "manual",
+        synthesisMode: "manual",
         label: "Custom",
       }),
     ).toEqual({
@@ -99,8 +99,8 @@ describe("consensus preset helpers", () => {
           outputType: "candidate",
         },
       ],
-      judgeSlot: null,
-      conflictMode: "manual",
+      synthesisSlot: null,
+      synthesisMode: "manual",
       source: {
         kind: "custom",
         label: "Custom",

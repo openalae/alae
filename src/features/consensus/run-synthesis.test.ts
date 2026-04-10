@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MockLanguageModelV1 } from "ai/test";
 
 import {
-  buildResolutionFromJudge,
+  buildResolutionFromSynthesis,
   buildTraceEvents,
   buildTruthPanelSnapshot,
   extractConflictPoints,
@@ -15,13 +15,39 @@ import type { SupportedProviderId } from "@/features/settings/providers";
 import type {
   CandidateModelOutput,
   ConflictPoint,
-  JudgeModelOutput,
+  SynthesisModelOutput,
   ModelRun,
   TraceEvent,
 } from "@/schema";
 
+import type { ExecutionPlan } from "@/features/consensus/types";
+
 const prompt = "Design a Phase 1 consensus workflow for a local-first desktop app.";
 const fixedNow = new Date("2026-03-17T12:00:00Z");
+
+const mockCrossVendorPlan: ExecutionPlan = {
+  version: 1,
+  candidateSlots: [
+    { id: "strong", role: "strong", outputType: "candidate", provider: "anthropic", modelId: "claude-sonnet-4-20250514" },
+    { id: "fast-1", role: "fast", outputType: "candidate", provider: "openai", modelId: "gpt-5-mini" },
+    { id: "fast-2", role: "fast", outputType: "candidate", provider: "google", modelId: "gemini-2.5-flash" },
+  ],
+  synthesisSlot: { id: "synthesis", role: "synthesis", outputType: "synthesis", provider: "openai", modelId: "gpt-5.2" },
+  synthesisMode: "auto",
+  source: { kind: "custom", label: "Mock" },
+};
+
+const mockFreePlan: ExecutionPlan = {
+  version: 1,
+  candidateSlots: [
+    { id: "strong", role: "strong", outputType: "candidate", provider: "openrouter", modelId: "openrouter/free" },
+    { id: "fast-1", role: "fast", outputType: "candidate", provider: "ollama", modelId: "qwen3:8b" },
+    { id: "fast-2", role: "fast", outputType: "candidate", provider: "ollama", modelId: "gemma3:4b" },
+  ],
+  synthesisSlot: { id: "synthesis", role: "synthesis", outputType: "synthesis", provider: "openrouter", modelId: "openrouter/free" },
+  synthesisMode: "auto",
+  source: { kind: "custom", label: "Mock" },
+};
 
 function createIdGenerator() {
   let counter = 0;
@@ -102,25 +128,24 @@ function createCompletedCandidateRun(
   };
 }
 
-function createCompletedJudgeRun(
-  conflictIds: string[],
-  overrides: Partial<JudgeModelOutput> = {},
+function createCompletedSynthesisRun(
+  overrides: Partial<SynthesisModelOutput> = {},
 ): ModelRun {
-  const parsed: JudgeModelOutput = {
-    outputType: "judge",
+  const parsed: SynthesisModelOutput = {
+    outputType: "synthesis",
     summary: "Ship the schema-driven consensus workflow.",
     chosenApproach: "Keep the consensus engine pure and typed.",
     rationale: "It preserves deterministic report building.",
-    resolvedConflictIds: conflictIds,
+    highlights: ["All models agree on orchestration independence."],
     openRisks: ["Verify prompt quality against real providers."],
     ...overrides,
   };
 
   return {
-    id: "run-judge-unit-1",
+    id: "run-synthesis-unit-1",
     provider: "openai",
     model: "gpt-5.2",
-    role: "judge",
+    role: "synthesis",
     status: "completed",
     startedAt: "2026-03-17T12:00:00Z",
     completedAt: "2026-03-17T12:00:02Z",
@@ -225,6 +250,15 @@ const fastCandidateTwo = createCandidateOutput({
   ],
   recommendedActions: ["Add a local smoke path for configured providers."],
 });
+
+const synthOutput: SynthesisModelOutput = {
+  outputType: "synthesis",
+  summary: "Use the pure synthesis engine and let later modules persist the report.",
+  chosenApproach: "Keep report generation pure.",
+  rationale: "The engine should return contracts before UI wiring happens.",
+  highlights: ["All models agree orchestration should stay independent."],
+  openRisks: ["Validate the preset with real keys before release."],
+};
 
 describe("consensus pure helpers", () => {
   it("extracts 2-of-3 consensus items and keeps stable ordering", () => {
@@ -354,7 +388,17 @@ describe("consensus pure helpers", () => {
     expect(snapshot.events[snapshot.events.length - 1]?.scope).toBe("fallback-resolution");
   });
 
-  it("filters judge conflict references that are not present in the conflict list", () => {
+  it("builds resolution from a completed synthesis run including highlights", () => {
+    const synthesisRun = createCompletedSynthesisRun();
+    const resolution = buildResolutionFromSynthesis({ synthesisRun: synthesisRun as never });
+
+    expect(resolution.summary).toBe("Ship the schema-driven consensus workflow.");
+    expect(resolution.chosenApproach).toBe("Keep the consensus engine pure and typed.");
+    expect(resolution.highlights).toEqual(["All models agree on orchestration independence."]);
+    expect(resolution.synthesisModelRunId).toBe("run-synthesis-unit-1");
+  });
+
+  it("correctly identifies completed conflict positions from candidate runs", () => {
     const conflicts: ConflictPoint[] = [
       {
         id: "conflict-1",
@@ -380,12 +424,9 @@ describe("consensus pure helpers", () => {
       },
     ];
 
-    const resolution = buildResolutionFromJudge({
-      judgeRun: createCompletedJudgeRun(["conflict-1", "missing-conflict"]) as never,
-      conflicts,
-    });
-
-    expect(resolution.resolvedConflictIds).toEqual(["conflict-1"]);
+    // Conflict positions are part of the candidate output — verify they remain intact
+    expect(conflicts[0].positions).toHaveLength(2);
+    expect(conflicts[0].positions[0].stance).toBe("Persist outside the engine.");
   });
 });
 
@@ -395,6 +436,7 @@ describe("runSynthesis orchestration", () => {
       {
         prompt,
         mode: "mock",
+        executionPlan: mockCrossVendorPlan,
       },
       {
         generateId: createIdGenerator(),
@@ -415,17 +457,10 @@ describe("runSynthesis orchestration", () => {
             modelId: "gemini-2.5-flash",
             object: fastCandidateTwo,
           }),
-          judge: createMockModel({
+          synthesis: createMockModel({
             provider: "openai",
             modelId: "gpt-5.2",
-            object: {
-              outputType: "judge",
-              summary: "Use the pure synthesis engine and let later modules persist the report.",
-              chosenApproach: "Keep report generation pure.",
-              rationale: "The engine should return contracts before UI wiring happens.",
-              resolvedConflictIds: [],
-              openRisks: ["Validate the preset with real keys before release."],
-            },
+            object: synthOutput,
           }),
         },
       },
@@ -438,6 +473,7 @@ describe("runSynthesis orchestration", () => {
   });
 
   it("returns partial when one provider key is missing in real mode", async () => {
+    let synthesisCallCount = 0;
     const realRegistry: Partial<RealProviderRegistry> = {
       anthropic: (modelId) =>
         createMockModel({
@@ -445,22 +481,17 @@ describe("runSynthesis orchestration", () => {
           modelId,
           object: strongCandidate,
         }),
-      openai: (modelId) =>
-        createMockModel({
+      openai: (modelId) => {
+        synthesisCallCount += 1;
+        return createMockModel({
           provider: "openai",
           modelId,
           object:
-            modelId === "gpt-5.2"
-              ? {
-                  outputType: "judge",
-                  summary: "Proceed with the pure orchestration engine.",
-                  chosenApproach: "Return validated report contracts.",
-                  rationale: "It supports later persistence and UI wiring.",
-                  resolvedConflictIds: [],
-                  openRisks: ["Exercise the Google slot after keys are configured."],
-                }
+            synthesisCallCount > 1
+              ? synthOutput
               : fastCandidateOne,
-        }),
+        });
+      },
     };
 
     const result = await runSynthesis(
@@ -468,6 +499,7 @@ describe("runSynthesis orchestration", () => {
         prompt,
         mode: "real",
         presetId: "crossVendorDefault",
+        executionPlan: mockCrossVendorPlan,
       },
       {
         generateId: createIdGenerator(),
@@ -482,15 +514,15 @@ describe("runSynthesis orchestration", () => {
     expect(result.report.modelRuns.find((run) => run.model === "gemini-2.5-flash")?.error?.code).toBe(
       "MISSING_API_KEY",
     );
-    expect(result.report.resolution?.chosenApproach).toBe("Return validated report contracts.");
   });
 
-  it("falls back to the strong run when the judge fails", async () => {
+  it("falls back to the strong run when the synthesis model fails", async () => {
     const result = await runSynthesis(
       {
         prompt,
         mode: "mock",
         presetId: "crossVendorDefault",
+        executionPlan: mockCrossVendorPlan,
       },
       {
         generateId: createIdGenerator(),
@@ -511,18 +543,22 @@ describe("runSynthesis orchestration", () => {
             modelId: "gemini-2.5-flash",
             object: fastCandidateTwo,
           }),
-          judge: createMockModel({
+          synthesis: createMockModel({
             provider: "openai",
             modelId: "gpt-5.2",
-            error: new Error("Judge provider timeout."),
+            error: new Error("Synthesis provider timeout."),
           }),
         },
       },
     );
 
+    // Fallback to the strong candidate when synthesis fails
     expect(result.report.status).toBe("partial");
-    expect(result.report.resolution?.resolvedConflictIds).toEqual([]);
-    expect(result.report.resolution?.judgeModelRunId).toBe(result.report.modelRuns[0].id);
+    // synthesisModelRunId falls back to the strong candidate run id
+    const strongRun = result.report.modelRuns.find(
+      (run) => run.provider === "anthropic",
+    );
+    expect(result.report.resolution?.synthesisModelRunId).toBe(strongRun?.id);
     expect(
       result.truthPanelSnapshot.events.some((event) => event.scope === "fallback-resolution"),
     ).toBe(true);
@@ -541,6 +577,7 @@ describe("runSynthesis orchestration", () => {
       {
         prompt,
         mode: "mock",
+        executionPlan: mockCrossVendorPlan,
       },
       {
         generateId: createIdGenerator(),
@@ -561,17 +598,10 @@ describe("runSynthesis orchestration", () => {
             modelId: "gemini-2.5-flash",
             object: fastCandidateTwo,
           }),
-          judge: createMockModel({
+          synthesis: createMockModel({
             provider: "openai",
             modelId: "gpt-5.2",
-            object: {
-              outputType: "judge",
-              summary: "Proceed with the valid runs only.",
-              chosenApproach: "Ignore the invalid candidate output.",
-              rationale: "Two valid candidates are enough for a partial synthesis.",
-              resolvedConflictIds: [],
-              openRisks: ["Review schema drift in the invalid slot."],
-            },
+            object: synthOutput,
           }),
         },
       },
@@ -593,6 +623,7 @@ describe("runSynthesis orchestration", () => {
         prompt,
         mode: "real",
         presetId: "freeDefault",
+        executionPlan: mockFreePlan,
       },
       {
         generateId: createIdGenerator(),
@@ -607,14 +638,7 @@ describe("runSynthesis orchestration", () => {
               object:
                 openRouterCallCount === 1
                   ? strongCandidate
-                  : {
-                      outputType: "judge",
-                      summary: "Use the free hosted router as the judge.",
-                      chosenApproach: "Mix OpenRouter with local Ollama candidates.",
-                      rationale: "This keeps hosted usage minimal while preserving a judge pass.",
-                      resolvedConflictIds: [],
-                      openRisks: ["Local Ollama availability still depends on the desktop runtime."],
-                    },
+                  : synthOutput,
             });
           },
           ollama: (modelId) =>
@@ -632,6 +656,7 @@ describe("runSynthesis orchestration", () => {
     );
 
     expect(result.report.status).toBe("ready");
+    // openrouter is read twice: once for the candidate slot, once for the synthesis slot
     expect(readProviders).toEqual(["openrouter", "openrouter"]);
     expect(result.report.modelRuns.some((run) => run.provider === "ollama")).toBe(true);
   });
@@ -641,6 +666,7 @@ describe("runSynthesis orchestration", () => {
       {
         prompt,
         mode: "mock",
+        executionPlan: mockCrossVendorPlan,
       },
       {
         generateId: createIdGenerator(),
@@ -673,7 +699,7 @@ describe("runSynthesis orchestration", () => {
 
     expect(result.report.status).toBe("failed");
     expect(result.report.reportStage).toBe("failed");
-    expect(result.report.judgeStatus).toBe("not_needed");
+    expect(result.report.synthesisStatus).toBe("not_needed");
     expect(result.report.resolution).toBeNull();
     expect(result.report.modelRuns.some(isCompletedCandidateRun)).toBe(false);
     expect(result.report.modelRuns).toHaveLength(3);

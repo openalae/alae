@@ -338,7 +338,7 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
     outlineNodes,
     selectNode,
     conversationSummaries,
-    resolveConflicts,
+    runManualSynthesis,
   } = controller;
 
   // Only show example prompts when there's no conversation history and no active content
@@ -431,7 +431,7 @@ export function ProgressiveWorkspace(props: ProgressiveWorkspaceProps) {
                   {node.id === selectedNode?.id && node.synthesisReport ? (
                     <SynthesisReportSplitView
                       report={node.synthesisReport}
-                      onResolve={resolveConflicts}
+                      onResolve={runManualSynthesis}
                       isBusy={isBusy}
                       conversationOutlineNodes={outlineNodes}
                       activeOutlineNodeId={selectedNode?.id ?? null}

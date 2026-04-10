@@ -11,9 +11,9 @@ const report: SynthesisReport = {
   summary: "Two candidate answers are ready for review.",
   status: "partial",
   candidateMode: "dual",
-  pendingJudge: true,
-  reportStage: "awaiting_judge",
-  judgeStatus: "pending",
+  pendingSynthesis: true,
+  reportStage: "awaiting_synthesis",
+  synthesisStatus: "pending",
   executionPlan: null,
   consensus: {
     summary: "Both candidates agree that a migration is needed.",

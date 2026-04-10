@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { BrainCircuit, X, Settings2, Zap, Save } from "lucide-react";
+import { BrainCircuit, X, Settings2, Zap, Save, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { WorkspaceController } from "@/features/workspace/controller";
-import type { ExecutionPlan, SynthesisModelSlot, JudgeMode } from "@/features/consensus";
+import type { ExecutionPlan, SynthesisModelSlot, SynthesisToggle } from "@/features/consensus";
 import {
   buildCatalogItemId,
   getProviderDefinition,
@@ -12,7 +12,7 @@ import {
 import { useState, useMemo, useCallback } from "react";
 
 /* ────────────────────────────────────────────
- *  Helpers — shared with the old PopoverPresetPicker
+ *  Helpers
  * ──────────────────────────────────────────── */
 
 function formatModelOptionLabel(model: ModelCatalogItem) {
@@ -57,26 +57,26 @@ function buildCandidateSlot(
   } as SynthesisModelSlot;
 }
 
-function buildJudgeSlot(model: Pick<ModelCatalogItem, "provider" | "modelId">): SynthesisModelSlot {
+function buildSynthesisSlot(model: Pick<ModelCatalogItem, "provider" | "modelId">): SynthesisModelSlot {
   return {
-    id: "judge",
+    id: "synthesis",
     provider: model.provider,
     modelId: model.modelId,
-    role: "judge",
-    outputType: "judge",
+    role: "synthesis",
+    outputType: "synthesis",
   } as SynthesisModelSlot;
 }
 
 function buildCustomPlan(input: {
   candidateSlots: readonly SynthesisModelSlot[];
-  judgeSlot: SynthesisModelSlot | null;
-  conflictMode: JudgeMode;
+  synthesisSlot: SynthesisModelSlot | null;
+  synthesisMode: SynthesisToggle;
 }): ExecutionPlan {
   return {
     version: 1,
     candidateSlots: input.candidateSlots,
-    judgeSlot: input.candidateSlots.length > 1 ? input.judgeSlot : null,
-    conflictMode: input.conflictMode,
+    synthesisSlot: input.candidateSlots.length > 1 ? input.synthesisSlot : null,
+    synthesisMode: input.synthesisMode,
     source: { kind: "custom", label: null },
   };
 }
@@ -146,23 +146,23 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
   const [localCandidateSlots, setLocalCandidateSlots] = useState<readonly SynthesisModelSlot[]>(
     () => [...seedPlan.candidateSlots],
   );
-  const [localJudgeSlot, setLocalJudgeSlot] = useState<SynthesisModelSlot | null>(
-    () => seedPlan.judgeSlot,
+  const [localSynthesisSlot, setLocalSynthesisSlot] = useState<SynthesisModelSlot | null>(
+    () => seedPlan.synthesisSlot ?? null,
   );
-  const [localConflictMode, setLocalConflictMode] = useState<JudgeMode>(
-    () => seedPlan.conflictMode,
+  const [localSynthesisMode, setLocalSynthesisMode] = useState<SynthesisToggle>(
+    () => seedPlan.synthesisMode ?? "auto",
   );
 
   const candidateCount = localCandidateSlots.length as 1 | 2 | 3;
 
-  // Judge model options
-  const currentJudgeOption = buildCurrentSlotOption(localJudgeSlot, controller.availableJudgeModels);
-  const judgeOptions = useMemo(() => {
-    if (!currentJudgeOption) return controller.availableJudgeModels;
-    return controller.availableJudgeModels.some((o) => o.id === currentJudgeOption.id)
-      ? controller.availableJudgeModels
-      : [currentJudgeOption, ...controller.availableJudgeModels];
-  }, [currentJudgeOption, controller.availableJudgeModels]);
+  // Synthesis model options
+  const currentSynthesisOption = buildCurrentSlotOption(localSynthesisSlot, controller.availableSynthesisModels);
+  const synthesisOptions = useMemo(() => {
+    if (!currentSynthesisOption) return controller.availableSynthesisModels;
+    return controller.availableSynthesisModels.some((o) => o.id === currentSynthesisOption.id)
+      ? controller.availableSynthesisModels
+      : [currentSynthesisOption, ...controller.availableSynthesisModels];
+  }, [currentSynthesisOption, controller.availableSynthesisModels]);
 
   // ── Local mutation helpers ──
 
@@ -182,14 +182,14 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
       return next;
     });
 
-    // Ensure judge slot if going multi
-    if (count > 1 && !localJudgeSlot && controller.availableJudgeModels[0]) {
-      setLocalJudgeSlot(buildJudgeSlot(controller.availableJudgeModels[0]));
+    // Auto-assign synthesis slot when going multi-model
+    if (count > 1 && !localSynthesisSlot && controller.availableSynthesisModels[0]) {
+      setLocalSynthesisSlot(buildSynthesisSlot(controller.availableSynthesisModels[0]));
     }
     if (count === 1) {
-      setLocalJudgeSlot(null);
+      setLocalSynthesisSlot(null);
     }
-  }, [controller.availableCandidateModels, controller.availableJudgeModels, localJudgeSlot]);
+  }, [controller.availableCandidateModels, controller.availableSynthesisModels, localSynthesisSlot]);
 
   const handleSetCandidateModel = useCallback((index: number, optionId: string) => {
     const model = controller.availableCandidateModels.find((m) => m.id === optionId);
@@ -202,18 +202,18 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
     });
   }, [controller.availableCandidateModels]);
 
-  const handleSetJudgeModel = useCallback((optionId: string) => {
-    const model = controller.availableJudgeModels.find((m) => m.id === optionId);
+  const handleSetSynthesisModel = useCallback((optionId: string) => {
+    const model = controller.availableSynthesisModels.find((m) => m.id === optionId);
     if (!model) return;
-    setLocalJudgeSlot(buildJudgeSlot(model));
-  }, [controller.availableJudgeModels]);
+    setLocalSynthesisSlot(buildSynthesisSlot(model));
+  }, [controller.availableSynthesisModels]);
 
   // ── Apply local edits to the global controller ──
   const handleApply = () => {
     const plan = buildCustomPlan({
       candidateSlots: localCandidateSlots,
-      judgeSlot: localJudgeSlot,
-      conflictMode: localConflictMode,
+      synthesisSlot: localSynthesisSlot,
+      synthesisMode: localSynthesisMode,
     });
     controller.applyExecutionPlan(plan);
     onClose();
@@ -228,11 +228,11 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
       const b = seed.candidateSlots[i];
       if (a.provider !== b.provider || a.modelId !== b.modelId) return true;
     }
-    if (localConflictMode !== seed.conflictMode) return true;
-    if (localJudgeSlot?.modelId !== seed.judgeSlot?.modelId) return true;
-    if (localJudgeSlot?.provider !== seed.judgeSlot?.provider) return true;
+    if (localSynthesisMode !== (seed.synthesisMode ?? "auto")) return true;
+    if (localSynthesisSlot?.modelId !== (seed.synthesisSlot?.modelId)) return true;
+    if (localSynthesisSlot?.provider !== (seed.synthesisSlot?.provider)) return true;
     return false;
-  }, [localCandidateSlots, localJudgeSlot, localConflictMode, executionPlanSnapshot, controller.selectedExecutionPlan]);
+  }, [localCandidateSlots, localSynthesisSlot, localSynthesisMode, executionPlanSnapshot, controller.selectedExecutionPlan]);
 
   return (
     <div className="fixed inset-y-0 right-0 z-[100] w-full max-w-md border-l border-border/40 bg-surface-container-high/95 backdrop-blur-xl shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col">
@@ -301,48 +301,52 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
           </div>
         </div>
 
-        {/* ── Resolution Judge ── */}
+        {/* ── Synthesis Model ── */}
         <div className="space-y-4 border-b border-border/20 pb-6">
           <div>
-            <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-              {t("Resolution Judge")}
+            <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+              <Sparkles className="h-3 w-3 text-primary/70" />
+              {t("Synthesis Model")}
             </div>
             <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-              {t("Runs when candidate models disagree.")}
+              {t("Summarizes candidate outputs and highlights agreements and differences.")}
             </p>
           </div>
 
-          {candidateCount > 1 && localJudgeSlot && judgeOptions.length > 0 ? (
+          {candidateCount > 1 && localSynthesisSlot && synthesisOptions.length > 0 ? (
             <ModelSelector
-              label={t("Judge")}
-              value={buildCatalogItemId(localJudgeSlot.provider, localJudgeSlot.modelId)}
-              options={judgeOptions}
-              onChange={handleSetJudgeModel}
+              label={t("Synthesis")}
+              value={buildCatalogItemId(localSynthesisSlot.provider, localSynthesisSlot.modelId)}
+              options={synthesisOptions}
+              onChange={handleSetSynthesisModel}
             />
           ) : (
             <div className="rounded-lg border border-border/50 bg-card/60 px-3 py-2 text-xs text-muted-foreground">
-              {t("Single-model mode skips the judge.")}
+              {candidateCount === 1
+                ? t("Single-model mode — synthesis is optional.")
+                : t("No synthesis model configured.")}
             </div>
           )}
 
+          {/* Synthesis mode: Auto / Manual */}
           <div className="flex items-center justify-between gap-4 mt-2">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">{t("Conflict Resolution")}</span>
+              <span className="text-[11px] font-medium text-muted-foreground">{t("Synthesis Trigger")}</span>
             </div>
             <div className="flex p-0.5 rounded-lg bg-surface-container-lowest border border-border/40">
               <button
-                onClick={() => setLocalConflictMode("auto")}
+                onClick={() => setLocalSynthesisMode("auto")}
                 className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
-                  localConflictMode === "auto" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  localSynthesisMode === "auto" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Zap className="h-3 w-3" />
                 {t("Auto")}
               </button>
               <button
-                onClick={() => setLocalConflictMode("manual")}
+                onClick={() => setLocalSynthesisMode("manual")}
                 className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
-                  localConflictMode === "manual" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  localSynthesisMode === "manual" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <BrainCircuit className="h-3 w-3" />
@@ -350,9 +354,14 @@ export function RecipeEditorSheet({ controller, executionPlanSnapshot, onClose, 
               </button>
             </div>
           </div>
+          <p className="text-[10px] text-muted-foreground/70">
+            {localSynthesisMode === "auto"
+              ? t("Synthesis runs automatically after all candidates complete.")
+              : t("Candidates show first — click 'Run Synthesis' to combine them.")}
+          </p>
         </div>
 
-        {/* ── Advanced Settings (read-only preview for now) ── */}
+        {/* ── Advanced Settings (read-only preview) ── */}
         <div className="space-y-4">
           <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
             {t("Advanced Settings")}

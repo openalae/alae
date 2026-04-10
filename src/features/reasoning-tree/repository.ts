@@ -64,6 +64,16 @@ const ForkNodeInputSchema = z
   })
   .strict();
 
+const UpdateNodeInputSchema = z
+  .object({
+    id: EntityIdSchema,
+    status: NodeStatusSchema.optional(),
+    synthesisReport: SynthesisReportSchema.nullable().optional(),
+    truthPanelSnapshot: TruthPanelSnapshotSchema.nullable().optional(),
+    updatedAt: IsoDatetimeSchema.optional(),
+  })
+  .strict();
+
 type Queryable = Pick<PGlite, "query"> | Transaction;
 
 type ConversationRow = {
@@ -126,6 +136,7 @@ type ModelRunRow = {
 export type CreateConversationInput = z.input<typeof CreateConversationInputSchema>;
 export type AppendNodeInput = z.input<typeof AppendNodeInputSchema>;
 export type ForkNodeInput = z.input<typeof ForkNodeInputSchema>;
+export type UpdateNodeInput = z.input<typeof UpdateNodeInputSchema>;
 
 export type CreateReasoningTreeRepositoryOptions = {
   dataDir?: string;
@@ -135,6 +146,7 @@ export type CreateReasoningTreeRepositoryOptions = {
 export type ReasoningTreeRepository = {
   createConversation: (input?: CreateConversationInput) => Promise<LoadedConversation>;
   appendNode: (input: AppendNodeInput) => Promise<ConversationNode>;
+  updateNode: (input: UpdateNodeInput) => Promise<ConversationNode>;
   forkNode: (input: ForkNodeInput) => Promise<ConversationBranch>;
   listConversations: () => Promise<ConversationSummary[]>;
   loadConversation: (id: string) => Promise<LoadedConversation | null>;
@@ -538,6 +550,60 @@ class ReasoningTreeRepositoryImpl implements ReasoningTreeRepository {
       );
 
       return node;
+    });
+  }
+
+  async updateNode(input: UpdateNodeInput): Promise<ConversationNode> {
+    const value = UpdateNodeInputSchema.parse(input);
+    const updatedAt = value.updatedAt ?? getTimestamp();
+    const db = await this.dbPromise;
+
+    return db.transaction(async (tx) => {
+      const node = await getNodeById(tx, value.id);
+
+      if (node === null) {
+        throw new Error(`Node ${value.id} was not found.`);
+      }
+
+      await tx.query(
+        `
+          UPDATE conversation_nodes
+          SET
+            status = COALESCE($2, status),
+            synthesis_report = COALESCE(CAST($3 AS jsonb), synthesis_report),
+            truth_panel_snapshot = COALESCE(CAST($4 AS jsonb), truth_panel_snapshot),
+            updated_at = $5
+          WHERE id = $1
+        `,
+        [
+          value.id,
+          value.status ?? null,
+          value.synthesisReport === undefined ? null : serializeJson(value.synthesisReport),
+          value.truthPanelSnapshot === undefined ? null : serializeJson(value.truthPanelSnapshot),
+          updatedAt,
+        ],
+      );
+
+      // If synthesis report was provided, replace all model runs associated with this node
+      if (value.synthesisReport !== undefined && value.synthesisReport !== null) {
+        await tx.query(`DELETE FROM model_runs WHERE node_id = $1`, [value.id]);
+        await insertModelRuns(tx, node.conversationId, node.id, value.synthesisReport);
+      }
+
+      await tx.query(
+        `
+          UPDATE conversations
+          SET updated_at = $2
+          WHERE id = $1
+        `,
+        [node.conversationId, updatedAt]
+      );
+
+      const updatedNode = await getNodeById(tx, value.id);
+      if (updatedNode === null) {
+        throw new Error(`Node ${value.id} was not found after update.`);
+      }
+      return mapNodeRow(updatedNode);
     });
   }
 

@@ -38,6 +38,7 @@ export type ModelCatalogItem = ProviderDiscoveredModel & {
   availability: ModelCatalogAvailability;
   supportsCandidate: boolean;
   supportsJudge: boolean;
+  tags: readonly string[];
 };
 
 export type ModelCatalogRecord = Record<SupportedProviderId, ModelCatalogItem[]>;
@@ -96,6 +97,7 @@ const curatedProviderCatalog: Record<
     source: ModelCatalogSource;
     supportsCandidate: boolean;
     supportsJudge: boolean;
+    tags: readonly string[];
   }>
 > = {
   openai: [
@@ -105,6 +107,7 @@ const curatedProviderCatalog: Record<
       source: "paid",
       supportsCandidate: true,
       supportsJudge: true,
+      tags: ["tier:fast"],
     },
     {
       modelId: "gpt-5.2",
@@ -112,6 +115,7 @@ const curatedProviderCatalog: Record<
       source: "paid",
       supportsCandidate: true,
       supportsJudge: true,
+      tags: ["tier:smart"],
     },
   ],
   anthropic: [
@@ -121,6 +125,7 @@ const curatedProviderCatalog: Record<
       source: "paid",
       supportsCandidate: true,
       supportsJudge: true,
+      tags: ["tier:smart"],
     },
   ],
   google: [
@@ -130,6 +135,7 @@ const curatedProviderCatalog: Record<
       source: "paid",
       supportsCandidate: true,
       supportsJudge: true,
+      tags: ["tier:fast"],
     },
   ],
   openrouter: [
@@ -139,6 +145,7 @@ const curatedProviderCatalog: Record<
       source: "free",
       supportsCandidate: true,
       supportsJudge: true,
+      tags: ["free", "tier:fast"],
     },
   ],
   ollama: [],
@@ -193,6 +200,7 @@ export function buildModelCatalogRecord(input: {
         availability: providerConfiguredMap.ollama ? "ready" : "unavailable",
         supportsCandidate: true,
         supportsJudge: true,
+        tags: ["local", "tier:fast"],
       }));
       continue;
     }
@@ -212,6 +220,7 @@ export function buildModelCatalogRecord(input: {
       availability,
       supportsCandidate: model.supportsCandidate,
       supportsJudge: model.supportsJudge,
+      tags: model.tags,
     }));
   }
 

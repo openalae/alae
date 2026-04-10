@@ -13,11 +13,11 @@ import {
 import type {
   BuildFallbackResolutionInput,
   BuildReportInput,
-  BuildResolutionFromJudgeInput,
+  BuildResolutionFromSynthesisInput,
   BuildTraceEventsInput,
   BuildTruthPanelSnapshotInput,
   CompletedCandidateRun,
-  CompletedJudgeRun,
+  CompletedSynthesisRun,
   ConflictExtractionOptions,
   ConsensusExtractionOptions,
 } from "@/features/consensus/types";
@@ -76,8 +76,8 @@ export function isCompletedCandidateRun(run: ModelRun): run is CompletedCandidat
   return run.status === "completed" && run.parsed?.outputType === "candidate";
 }
 
-export function isCompletedJudgeRun(run: ModelRun): run is CompletedJudgeRun {
-  return run.status === "completed" && run.parsed?.outputType === "judge";
+export function isCompletedSynthesisRun(run: ModelRun): run is CompletedSynthesisRun {
+  return run.status === "completed" && (run.parsed?.outputType === "synthesis" || run.parsed?.outputType === "judge");
 }
 
 export function extractConsensusItems(
@@ -218,21 +218,16 @@ export function extractConflictPoints(
     }));
 }
 
-export function buildResolutionFromJudge({
-  judgeRun,
-  conflicts,
-}: BuildResolutionFromJudgeInput): Resolution {
-  const knownConflictIds = new Set(conflicts.map((conflict) => conflict.id));
-
+export function buildResolutionFromSynthesis({
+  synthesisRun,
+}: BuildResolutionFromSynthesisInput): Resolution {
   return {
-    summary: judgeRun.parsed.summary,
-    rationale: judgeRun.parsed.rationale,
-    chosenApproach: judgeRun.parsed.chosenApproach,
-    resolvedConflictIds: judgeRun.parsed.resolvedConflictIds.filter((id) =>
-      knownConflictIds.has(id),
-    ),
-    judgeModelRunId: judgeRun.id,
-    openRisks: uniqueStrings(judgeRun.parsed.openRisks),
+    summary: synthesisRun.parsed.summary,
+    rationale: synthesisRun.parsed.rationale,
+    chosenApproach: synthesisRun.parsed.chosenApproach,
+    highlights: synthesisRun.parsed.highlights ?? [],
+    synthesisModelRunId: synthesisRun.id,
+    openRisks: uniqueStrings(synthesisRun.parsed.openRisks ?? []),
   };
 }
 
@@ -248,10 +243,10 @@ export function buildFallbackResolution({
 
   return {
     summary: `Fallback resolution from {{label}}: {{summary}}`,
-    rationale: `Judge resolution was unavailable, so the synthesis fell back to {{label}}.`,
+    rationale: `Synthesis was unavailable, so the result fell back to {{label}}.`,
     chosenApproach,
-    resolvedConflictIds: [],
-    judgeModelRunId: sourceRun.id,
+    highlights: [],
+    synthesisModelRunId: sourceRun.id,
     openRisks,
   };
 }
@@ -264,10 +259,10 @@ export function buildCandidateResolution({
 
   return {
     summary: sourceRun.parsed.summary,
-    rationale: "Candidate runs completed without a judge pass.",
+    rationale: "Candidate runs completed without a synthesis pass.",
     chosenApproach,
-    resolvedConflictIds: [],
-    judgeModelRunId: sourceRun.id,
+    highlights: [],
+    synthesisModelRunId: sourceRun.id,
     openRisks: [],
   };
 }
@@ -374,7 +369,7 @@ export function buildTraceEvents({
       kind: "fallback-resolution",
       level: "warning",
       occurredAt: generatedAt,
-      message: "Judge resolution was unavailable; a fallback resolution was used.",
+      message: "Synthesis was unavailable; a fallback resolution was used.",
     });
   }
 
@@ -426,9 +421,9 @@ export function buildSynthesisReport(input: BuildReportInput) {
     summary: input.summary,
     status: input.status,
     candidateMode: input.candidateMode,
-    pendingJudge: input.pendingJudge,
+    pendingSynthesis: input.pendingSynthesis,
     reportStage: input.reportStage,
-    judgeStatus: input.judgeStatus,
+    synthesisStatus: input.synthesisStatus,
     executionPlan: input.executionPlan,
     consensus: {
       summary: buildConsensusSummary(input.consensusItems, input.successfulCandidateCount),

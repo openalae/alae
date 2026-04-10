@@ -16,7 +16,7 @@ export const createRuntimeSlice: AppStoreSlice<RuntimeActions> = (set) => ({
   completeRun: (report) =>
     set({
       runStatus: report.status === "failed" ? "failed" : "completed",
-      runPhase: report.reportStage === "awaiting_judge" ? "conflicts_pending" : report.reportStage === "failed" ? "failed" : "completed",
+      runPhase: report.reportStage === "awaiting_synthesis" ? "conflicts_pending" : report.reportStage === "failed" ? "failed" : "completed",
       runtimeErrorMessage: null,
       lastRunCompletedAt: report.createdAt,
       latestSynthesisReport: report,

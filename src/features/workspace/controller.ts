@@ -2,19 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  areModelSelectionsEqual,
   buildExecutionPlanFromModelSelection,
   getSynthesisPresetDefinition,
-  buildExecutionPlanFromPreset,
   createDefaultMockRegistryForExecutionPlan,
   resolveModelSelectionFromPreset,
   runSynthesis,
-  runJudgeOnly,
+  runSynthesisOnly,
   type ExecutionPlan,
   type MockRegistry,
   type SynthesisModelSlot,
   type SynthesisExecutionResult,
-  type SynthesisMode,
+  type SynthesisRunMode,
   type SynthesisPresetId,
+  type SynthesisToggle,
 } from "@/features/consensus";
 import {
   createReasoningTreeRepository,
@@ -78,7 +79,7 @@ type RunWorkspaceSynthesisOptions = {
   apiKeyStatuses?: ApiKeyStatuses;
   presetId?: SynthesisPresetId;
   executionPlan?: ExecutionPlan;
-  judgeMode?: import("@/features/consensus/types").JudgeMode;
+  synthesisMode?: SynthesisToggle;
   runSynthesisImpl?: typeof runSynthesis;
   createMockRegistry?: (executionPlan: ExecutionPlan) => MockRegistry;
 };
@@ -100,7 +101,7 @@ type SubmissionTarget = {
 };
 
 export type WorkspaceRunResult = SynthesisExecutionResult & {
-  effectiveMode: SynthesisMode;
+  effectiveMode: SynthesisRunMode;
 };
 
 type WorkspaceModelOption = ModelCatalogItem;
@@ -326,26 +327,26 @@ function buildCandidateSlot(
   } satisfies SynthesisModelSlot;
 }
 
-function buildJudgeSlot(model: Pick<ModelCatalogItem, "provider" | "modelId">) {
+function buildSynthesisSlot(model: Pick<ModelCatalogItem, "provider" | "modelId">) {
   return {
-    id: "judge",
+    id: "synthesis",
     provider: model.provider,
     modelId: model.modelId,
-    role: "judge",
-    outputType: "judge",
+    role: "synthesis",
+    outputType: "synthesis",
   } satisfies SynthesisModelSlot;
 }
 
 function buildCustomExecutionPlan(input: {
   candidateSlots: readonly SynthesisModelSlot[];
-  judgeSlot: SynthesisModelSlot | null;
-  conflictMode: import("@/features/consensus/types").JudgeMode;
+  synthesisSlot: SynthesisModelSlot | null;
+  synthesisMode: SynthesisToggle;
 }): ExecutionPlan {
   return {
     version: 1,
     candidateSlots: input.candidateSlots,
-    judgeSlot: input.candidateSlots.length > 1 ? input.judgeSlot : null,
-    conflictMode: input.conflictMode,
+    synthesisSlot: input.synthesisSlot,
+    synthesisMode: input.synthesisMode,
     source: {
       kind: "custom",
       label: null,
@@ -379,7 +380,7 @@ function ensureOptionForSlot(
       source: "local",
       availability: "unavailable",
       supportsCandidate: slot.outputType === "candidate",
-      supportsJudge: slot.outputType === "judge",
+      supportsJudge: slot.outputType === "synthesis" || slot.outputType === "judge",
     }
   );
 }
@@ -387,25 +388,25 @@ function ensureOptionForSlot(
 function buildTemplateExecutionPlan(
   presetId: SynthesisPresetId,
   modelCatalog: Record<SupportedProviderId, ModelCatalogItem[]>,
-  conflictMode: import("@/features/consensus/types").JudgeMode,
+  synthesisMode: SynthesisToggle,
 ) {
   const selection = resolveModelSelectionFromPreset(presetId, modelCatalog);
 
   return buildExecutionPlanFromModelSelection({
     modelCatalog,
     selection,
-    conflictMode,
+    synthesisMode,
     label: getSynthesisPresetDefinition(presetId).label,
   });
 }
 
 export function resolveWorkspaceRunMode(
   apiKeyStatuses: ApiKeyStatuses,
-  executionPlan: ExecutionPlan = buildExecutionPlanFromPreset(defaultWorkspacePresetId),
-): SynthesisMode {
+  executionPlan: ExecutionPlan,
+): SynthesisRunMode {
   const requiredProviders = new Set([
     ...executionPlan.candidateSlots.map((slot) => slot.provider),
-    ...(executionPlan.judgeSlot ? [executionPlan.judgeSlot.provider] : []),
+    ...(executionPlan.synthesisSlot ? [executionPlan.synthesisSlot.provider] : []),
   ]);
 
   for (const provider of requiredProviders) {
@@ -424,7 +425,7 @@ function getWorkspacePresetReadiness(
   const providerIds = [
     ...new Set([
       ...executionPlan.candidateSlots.map((slot) => slot.provider),
-      ...(executionPlan.judgeSlot ? [executionPlan.judgeSlot.provider] : []),
+      ...(executionPlan.synthesisSlot ? [executionPlan.synthesisSlot.provider] : []),
     ]),
   ];
 
@@ -462,7 +463,7 @@ export async function runWorkspaceSynthesis(
 ): Promise<WorkspaceRunResult> {
   const presetId = options.presetId ?? defaultWorkspacePresetId;
   const executionPlan =
-    options.executionPlan ?? buildExecutionPlanFromPreset(presetId, options.judgeMode ?? "auto");
+    options.executionPlan ?? buildTemplateExecutionPlan(presetId, appStore.getState().modelCatalog, options.synthesisMode ?? "auto");
   const sourcePresetId =
     executionPlan.source.kind === "preset"
       ? (executionPlan.source.presetId as SynthesisPresetId)
@@ -481,7 +482,7 @@ export async function runWorkspaceSynthesis(
             mode: "mock",
             presetId: sourcePresetId,
             executionPlan,
-            judgeMode: options.judgeMode,
+            synthesisMode: options.synthesisMode,
             language: options.language,
           },
           {
@@ -493,7 +494,7 @@ export async function runWorkspaceSynthesis(
           mode: "real",
           presetId: sourcePresetId,
           executionPlan,
-          judgeMode: options.judgeMode,
+          synthesisMode: options.synthesisMode,
           language: options.language,
         });
 
@@ -515,7 +516,7 @@ export function useWorkspaceController() {
   const runPhase = useAppStore((state) => state.runPhase);
   const runtimeErrorMessage = useAppStore((state) => state.runtimeErrorMessage);
   const repositoryRef = useRef<ReasoningTreeRepository | null>(null);
-  const { judgeMode, defaultPresetId } = useSettingsStore();
+  const { synthesisMode, defaultPresetId } = useSettingsStore();
 
   if (repositoryRef.current === null) {
     repositoryRef.current = createReasoningTreeRepository();
@@ -528,14 +529,14 @@ export function useWorkspaceController() {
   const [inputErrorMessage, setInputErrorMessage] = useState<string | null>(null);
   const [bootstrapErrorMessage, setBootstrapErrorMessage] = useState<string | null>(null);
   const [bootstrapStatus, setBootstrapStatus] = useState<WorkspaceBootstrapStatus>("loading");
-  const [lastExecutionMode, setLastExecutionMode] = useState<SynthesisMode | null>(null);
+  const [lastExecutionMode, setLastExecutionMode] = useState<SynthesisRunMode | null>(null);
   const storedExecutionPlan = readStoredWorkspaceExecutionPlan();
   const initialPresetId = readStoredWorkspacePresetId() ?? defaultPresetId ?? defaultWorkspacePresetId;
   const [selectedPresetId, setSelectedPresetId] = useState<SynthesisPresetId | null>(
     storedExecutionPlan ? null : initialPresetId,
   );
   const [selectedExecutionPlan, setSelectedExecutionPlan] = useState<ExecutionPlan>(() =>
-    storedExecutionPlan ?? buildTemplateExecutionPlan(initialPresetId, modelCatalog, judgeMode),
+    storedExecutionPlan ?? buildTemplateExecutionPlan(initialPresetId, modelCatalog, synthesisMode),
   );
   const selectedPresetDefinition = selectedPresetId
     ? getSynthesisPresetDefinition(selectedPresetId)
@@ -561,17 +562,17 @@ export function useWorkspaceController() {
   const availableCandidateModels = flattenModelCatalog(modelCatalog).filter(
     (model) => model.supportsCandidate,
   );
-  const availableJudgeModels = flattenModelCatalog(modelCatalog).filter(
+  const availableSynthesisModels = flattenModelCatalog(modelCatalog).filter(
     (model) => model.supportsJudge,
   );
 
   const applyPresetTemplate = (presetId: SynthesisPresetId) => {
     setSelectedPresetId(presetId);
-    setSelectedExecutionPlan(buildTemplateExecutionPlan(presetId, modelCatalog, judgeMode));
+    setSelectedExecutionPlan(buildTemplateExecutionPlan(presetId, modelCatalog, synthesisMode));
   };
 
   const setCandidateCount = (count: 1 | 2 | 3) => {
-    const fallbackPlan = buildTemplateExecutionPlan(defaultWorkspacePresetId, modelCatalog, judgeMode);
+    const fallbackPlan = buildTemplateExecutionPlan(defaultWorkspacePresetId, modelCatalog, synthesisMode);
 
     setSelectedPresetId(null);
     setSelectedExecutionPlan((currentPlan) => {
@@ -594,15 +595,16 @@ export function useWorkspaceController() {
         );
       }
 
-      const judgeOption =
-        ensureOptionForSlot(availableJudgeModels, currentPlan.judgeSlot) ??
-        availableJudgeModels[0] ??
-        ensureOptionForSlot(availableJudgeModels, fallbackPlan.judgeSlot);
+      // When adding >1 candidates and no synthesis slot, auto-assign one
+      const synthOption =
+        ensureOptionForSlot(availableSynthesisModels, currentPlan.synthesisSlot) ??
+        availableSynthesisModels[0] ??
+        ensureOptionForSlot(availableSynthesisModels, fallbackPlan.synthesisSlot);
 
       return buildCustomExecutionPlan({
         candidateSlots: nextCandidateSlots,
-        judgeSlot: judgeOption ? buildJudgeSlot(judgeOption) : null,
-        conflictMode: judgeMode,
+        synthesisSlot: count > 1 && synthOption ? buildSynthesisSlot(synthOption) : null,
+        synthesisMode,
       });
     });
   };
@@ -634,20 +636,25 @@ export function useWorkspaceController() {
         nextCandidateSlots[index] = buildCandidateSlot(index, nextModel);
       }
 
+      // When >1 candidates, auto-assign synthesis if missing
+      const synthOption =
+        ensureOptionForSlot(availableSynthesisModels, currentPlan.synthesisSlot) ??
+        availableSynthesisModels[0];
+
       return buildCustomExecutionPlan({
         candidateSlots: nextCandidateSlots,
-        judgeSlot:
+        synthesisSlot:
           nextCandidateSlots.length > 1
-            ? currentPlan.judgeSlot ??
-              (availableJudgeModels[0] ? buildJudgeSlot(availableJudgeModels[0]) : null)
+            ? currentPlan.synthesisSlot ??
+              (synthOption ? buildSynthesisSlot(synthOption) : null)
             : null,
-        conflictMode: judgeMode,
+        synthesisMode,
       });
     });
   };
 
-  const setJudgeModelSelection = (optionId: string) => {
-    const nextModel = findModelOptionById(availableJudgeModels, optionId);
+  const setSynthesisModelSelection = (optionId: string) => {
+    const nextModel = findModelOptionById(availableSynthesisModels, optionId);
 
     if (!nextModel) {
       return;
@@ -657,8 +664,8 @@ export function useWorkspaceController() {
     setSelectedExecutionPlan((currentPlan) =>
       buildCustomExecutionPlan({
         candidateSlots: currentPlan.candidateSlots,
-        judgeSlot: buildJudgeSlot(nextModel),
-        conflictMode: judgeMode,
+        synthesisSlot: buildSynthesisSlot(nextModel),
+        synthesisMode,
       }),
     );
   };
@@ -875,15 +882,15 @@ export function useWorkspaceController() {
 
   useEffect(() => {
     if (selectedPresetId) {
-      setSelectedExecutionPlan(buildTemplateExecutionPlan(selectedPresetId, modelCatalog, judgeMode));
+      setSelectedExecutionPlan(buildTemplateExecutionPlan(selectedPresetId, modelCatalog, synthesisMode));
       return;
     }
 
     setSelectedExecutionPlan((currentPlan) => ({
       ...currentPlan,
-      conflictMode: judgeMode,
+      synthesisMode,
     }));
-  }, [judgeMode, modelCatalog, selectedPresetId]);
+  }, [synthesisMode, modelCatalog, selectedPresetId]);
 
   const submitPrompt = async () => {
     const trimmedPrompt = promptDraft.trim();
@@ -913,7 +920,7 @@ export function useWorkspaceController() {
         apiKeyStatuses,
         presetId: selectedPresetId ?? defaultWorkspacePresetId,
         executionPlan: selectedExecutionPlan,
-        judgeMode,
+        synthesisMode,
         language: i18n.language,
       });
 
@@ -964,17 +971,19 @@ export function useWorkspaceController() {
     }
   };
 
-  // Manual conflict resolution: re-run only the judge on existing candidate runs
-  const resolveConflicts = async () => {
-    if (isBusy || !latestSynthesisReport || latestSynthesisReport.reportStage !== "awaiting_judge") {
+  /** Manual synthesis trigger: re-run only the synthesis step on existing candidate runs. */
+  const runManualSynthesis = async () => {
+    if (isBusy || !latestSynthesisReport || latestSynthesisReport.reportStage !== "awaiting_synthesis") {
       return;
     }
 
-    const candidateRuns = latestSynthesisReport.modelRuns.filter((r) => r.role !== "judge");
+    const candidateRuns = latestSynthesisReport.modelRuns.filter(
+      (r) => r.role !== "judge" && r.role !== "synthesis",
+    );
     if (candidateRuns.length === 0) return;
 
     const state = appStore.getState();
-    state.beginRun("judge_running");
+    state.beginRun("synthesis_running" as never);
 
     try {
       const executionPlan =
@@ -985,25 +994,45 @@ export function useWorkspaceController() {
           ? (executionPlan.source.presetId as SynthesisPresetId)
           : selectedPresetId ?? defaultWorkspacePresetId;
       const apiKeyStatusesCurrent = appStore.getState().apiKeyStatuses;
-      const effectiveMode = resolveWorkspaceRunMode(apiKeyStatusesCurrent, executionPlan);
+      const mode = resolveWorkspaceRunMode(apiKeyStatusesCurrent, executionPlan);
 
-      const result = await runJudgeOnly(
+      const result = await runSynthesisOnly(
         {
           prompt: latestSynthesisReport.prompt,
-          mode: effectiveMode,
+          mode,
           candidateRuns,
           presetId: planPresetId,
           executionPlan,
           language: i18n.language,
         },
-        effectiveMode === "mock"
+        mode === "mock"
           ? { mockRegistry: createDefaultMockRegistryForExecutionPlan(executionPlan) }
           : {},
       );
 
-      // Update store with resolved report
       state.completeRun(result.report);
       state.setTruthPanelSnapshot(result.truthPanelSnapshot);
+
+      const { currentNodeId, currentConversationId, currentBranchId } = state;
+
+      if (currentNodeId && currentConversationId && currentBranchId) {
+        await repository.updateNode({
+          id: currentNodeId,
+          status: result.report.status === "failed" ? "failed" : "completed",
+          synthesisReport: result.report,
+          truthPanelSnapshot: result.truthPanelSnapshot,
+        });
+
+        const fresh = await repository.loadConversation(currentConversationId);
+        if (fresh) {
+          setLoadedConversation(fresh);
+          hydrateWorkspaceStateFromConversation(fresh, {
+            branchId: currentBranchId,
+            nodeId: currentNodeId,
+            preserveExistingResult: true,
+          });
+        }
+      }
     } catch (error) {
       state.failRun(getErrorMessage(error));
     }
@@ -1038,7 +1067,7 @@ export function useWorkspaceController() {
     isBusy,
     effectiveMode,
     displayMode,
-    judgeMode,
+    synthesisMode,
     selectedPresetId,
     selectedExecutionPlan,
     selectedPresetDefinition,
@@ -1046,11 +1075,11 @@ export function useWorkspaceController() {
     selectedPresetMissingHostedProviders: selectedPresetReadiness.missingHostedProviders,
     selectedPresetUnavailableLocalProviders: selectedPresetReadiness.unavailableLocalProviders,
     availableCandidateModels,
-    availableJudgeModels,
+    availableSynthesisModels,
     setSelectedPresetId: applyPresetTemplate,
     setCandidateCount,
     setCandidateModelSelection,
-    setJudgeModelSelection,
+    setSynthesisModelSelection,
     applyExecutionPlan,
     conversationSummaries,
     loadedConversation,
@@ -1064,7 +1093,7 @@ export function useWorkspaceController() {
     selectedNodeIsHead,
     pendingSubmissionMode,
     submitPrompt,
-    resolveConflicts,
+    runManualSynthesis,
     selectConversation,
     startNewConversation,
     selectBranch,

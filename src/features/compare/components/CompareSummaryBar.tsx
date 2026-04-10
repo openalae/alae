@@ -1,6 +1,8 @@
-import { AlertTriangle, CheckCircle2, Settings2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, LoaderCircle, Play, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import type { SynthesisReport } from "@/schema";
 import type { WorkspaceController } from "@/features/workspace/controller";
 import { RecipeEditorSheet } from "@/features/recipe/components/RecipeEditorSheet";
@@ -30,41 +32,71 @@ export function CompareSummaryBar(props: { report: SynthesisReport; controller: 
   const consensusCount = report.consensus?.items.length ?? 0;
   const question = getPrimaryQuestion(report);
   const hasDisagreement = conflictCount > 0;
+  const isPendingSynthesis = report.pendingSynthesis;
 
   return (
     <div className="shrink-0 border-b border-border/20 bg-background/40 px-6 py-2.5 flex items-center gap-4 min-h-0">
-      {/* Disagreement / agreement indicator */}
-      <div className={`shrink-0 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest ${
-        hasDisagreement ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
-      }`}>
-        {hasDisagreement
-          ? <AlertTriangle className="h-3 w-3" />
-          : <CheckCircle2 className="h-3 w-3" />
-        }
-        {hasDisagreement ? t("Disagree") : t("Agree")}
-      </div>
+      {/* Status indicator */}
+      {isPendingSynthesis ? (
+        /* Pending synthesis — show CTA */
+        <>
+          <div className="shrink-0 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-3 w-3" />
+            {t("Awaiting synthesis")}
+          </div>
+          <div className="shrink-0 h-3 w-px bg-border/50" />
+          <p className="flex-1 min-w-0 text-xs text-foreground/80 truncate leading-5">
+            {t("Candidates complete — run synthesis to combine results.")}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => controller.runManualSynthesis()}
+            disabled={controller.isBusy}
+            className="shrink-0 gap-1.5 h-7 px-3 text-[10px]"
+          >
+            {controller.isBusy ? (
+              <LoaderCircle className="h-3 w-3 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+            {t("Run Synthesis")}
+          </Button>
+        </>
+      ) : (
+        /* Normal state — disagreement/agreement indicator */
+        <>
+          <div className={`shrink-0 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest ${
+            hasDisagreement ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
+          }`}>
+            {hasDisagreement
+              ? <AlertTriangle className="h-3 w-3" />
+              : <CheckCircle2 className="h-3 w-3" />
+            }
+            {hasDisagreement ? t("Disagree") : t("Agree")}
+          </div>
 
-      {/* Divider */}
-      <div className="shrink-0 h-3 w-px bg-border/50" />
+          <div className="shrink-0 h-3 w-px bg-border/50" />
 
-      {/* The crux — conflict question or chosen approach */}
-      <p className="flex-1 min-w-0 text-xs text-foreground/80 truncate leading-5">
-        {question}
-      </p>
+          <p className="flex-1 min-w-0 text-xs text-foreground/80 truncate leading-5">
+            {question}
+          </p>
 
-      {/* Compact counts */}
-      <div className="flex items-center gap-3 shrink-0 text-[10px] font-mono text-muted-foreground mr-2">
-        {consensusCount > 0 && (
-          <span className="text-emerald-600 dark:text-emerald-400">
-            {consensusCount} {t("agreed")}
-          </span>
-        )}
-        {conflictCount > 0 && (
-          <span className="text-amber-600 dark:text-amber-400">
-            {conflictCount} {conflictCount === 1 ? t("conflict") : t("conflicts")}
-          </span>
-        )}
-      </div>
+          {/* Compact counts */}
+          <div className="flex items-center gap-3 shrink-0 text-[10px] font-mono text-muted-foreground mr-2">
+            {consensusCount > 0 && (
+              <span className="text-emerald-600 dark:text-emerald-400">
+                {consensusCount} {t("agreed")}
+              </span>
+            )}
+            {conflictCount > 0 && (
+              <span className="text-amber-600 dark:text-amber-400">
+                {conflictCount} {conflictCount === 1 ? t("conflict") : t("conflicts")}
+              </span>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Recipe Editor Button */}
       <div className="shrink-0 h-3 w-px bg-border/50 mr-1" />
@@ -87,4 +119,3 @@ export function CompareSummaryBar(props: { report: SynthesisReport; controller: 
     </div>
   );
 }
-

@@ -32,17 +32,16 @@ function isEditableTarget(target: EventTarget | null) {
 }
 
 function getReportStageLabel(report: SynthesisReport, t: (key: string) => string) {
-  if (report.reportStage === "awaiting_judge") return t("Awaiting judge");
-  if (report.reportStage === "judge_running") return t("Judge running");
+  if (report.reportStage === "awaiting_synthesis") return t("Awaiting synthesis");
   if (report.reportStage === "failed") return t("Failed");
+  if (report.reportStage === "synthesized") return t("Synthesized");
   if (report.resolution) return t("Resolved");
   if (report.status === "ready") return t("Ready");
   return t("Candidate complete");
 }
 
 function getReportStageBadgeClasses(report: SynthesisReport) {
-  if (report.reportStage === "awaiting_judge") return "badge-warning";
-  if (report.reportStage === "judge_running") return "badge-info";
+  if (report.reportStage === "awaiting_synthesis") return "badge-warning";
   if (report.reportStage === "failed") return "badge-error";
   if (report.resolution || report.status === "ready") return "badge-success";
   return "badge-neutral";
@@ -67,7 +66,7 @@ function getRunConversationText(run: ModelRun, t: (key: string, options?: Record
     return t(run.parsed.summary, { topic: "" });
   }
 
-  if (run.parsed?.outputType === "judge") {
+  if (run.parsed?.outputType === "synthesis") {
     return [t(run.parsed.chosenApproach), t(run.parsed.summary)].filter(Boolean).join("\n\n");
   }
 
@@ -415,7 +414,7 @@ function ReportTopBar(props: {
               </Button>
             ) : null}
 
-            {props.report.reportStage === "awaiting_judge" ? (
+            {props.report.reportStage === "awaiting_synthesis" ? (
               <Button
                 type="button"
                 size="sm"
@@ -426,9 +425,9 @@ function ReportTopBar(props: {
                 {props.isBusy ? (
                   <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <Sparkles className="h-3.5 w-3.5" />
                 )}
-                {t("Resolve with AI Judge")}
+                {t("Run Synthesis")}
               </Button>
             ) : null}
 
@@ -547,7 +546,7 @@ export function SynthesisReportSplitView(props: {
 }) {
   const { t } = useTranslation();
   const candidateRuns = useMemo(
-    () => props.report.modelRuns.filter((run) => run.role !== "judge"),
+    () => props.report.modelRuns.filter((run) => run.role !== "judge" && run.role !== "synthesis"),
     [props.report.modelRuns],
   );
   const hasMergedView = candidateRuns.length > 1 && props.report.resolution !== null;
@@ -555,7 +554,7 @@ export function SynthesisReportSplitView(props: {
     props.report.conflicts.length > 0 ? "conflicts" : "summary",
   );
   const [isExpanded, setIsExpanded] = useState(
-    props.report.reportStage === "awaiting_judge" || props.report.reportStage === "failed",
+    props.report.reportStage === "awaiting_synthesis" || props.report.reportStage === "failed",
   );
   const [showSourcePanels, setShowSourcePanels] = useState(!hasMergedView);
   const [activePanelIndex, setActivePanelIndex] = useState(0);
@@ -563,7 +562,7 @@ export function SynthesisReportSplitView(props: {
 
   useEffect(() => {
     setActiveTab(props.report.conflicts.length > 0 ? "conflicts" : "summary");
-    setIsExpanded(props.report.reportStage === "awaiting_judge" || props.report.reportStage === "failed");
+    setIsExpanded(props.report.reportStage === "awaiting_synthesis" || props.report.reportStage === "failed");
     setShowSourcePanels(!hasMergedView);
     setActivePanelIndex(0);
   }, [props.report.id, props.report.reportStage, props.report.conflicts.length, hasMergedView]);
@@ -610,7 +609,7 @@ export function SynthesisReportSplitView(props: {
 
         if (key === "r") {
           event.preventDefault();
-          if (props.report.reportStage === "awaiting_judge" && !props.isBusy) {
+          if (props.report.reportStage === "awaiting_synthesis" && !props.isBusy) {
             props.onResolve();
             return;
           }
@@ -676,7 +675,7 @@ export function SynthesisReportSplitView(props: {
 
   const quickHints = [
     `${t("Summary")} · Cmd/Ctrl+Shift+S`,
-    `${props.report.reportStage === "awaiting_judge" ? t("Resolve with AI Judge") : t("Conflicts")} · Cmd/Ctrl+Shift+R`,
+    `${props.report.reportStage === "awaiting_synthesis" ? t("Run Synthesis") : t("Conflicts")} · Cmd/Ctrl+Shift+R`,
     `${t("Directory")} · Cmd/Ctrl+Shift+O`,
     `Pane · Cmd/Ctrl+1-3`,
   ];
